@@ -3,18 +3,21 @@
 // Usage: nostr-tl [-n <number>] [--pubkey <hex>] [--me]
 import { getRelays, getPriv, privToPub, nostr_read, toHex } from './lib.mjs';
 
-let limit = 20;
-let pubkey = null;
+let limit = 20, pubkey = null, since = null, until = null;
 const args = process.argv.slice(2);
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '-n' && args[i + 1]) { limit = parseInt(args[++i]) || 20; }
   else if (args[i] === '--pubkey' && args[i + 1]) { pubkey = toHex(args[++i]); }
   else if (args[i] === '--me') { pubkey = privToPub(getPriv()); }
+  else if (args[i] === '--since' && args[i + 1]) { const v = args[++i]; since = +v || Math.floor(new Date(v)/1000); }
+  else if (args[i] === '--until' && args[i + 1]) { const v = args[++i]; until = +v || Math.floor(new Date(v)/1000); }
 }
 
 const filter = { kinds: [1], limit };
 if (pubkey) filter.authors = [pubkey];
+if (since) filter.since = since;
+if (until) filter.until = until;
 
 const events = await nostr_read(getRelays(), [filter]);
 
