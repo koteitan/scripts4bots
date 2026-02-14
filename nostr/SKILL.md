@@ -1,6 +1,6 @@
 ---
 name: nostr
-description: Post, read, reply, quote, mention, and zap on Nostr via raw WebSocket scripts. Use when the user asks to post to Nostr, read Nostr timeline, reply/quote/mention on Nostr, or send zaps. Requires NOSTR_NSEC and NOSTR_RELAYS env vars.
+description: Post, read, reply, quote, mention, react, repost, search, and zap on Nostr via raw WebSocket scripts. Use when the user asks to post to Nostr, read Nostr timeline, reply/quote/mention on Nostr, react/repost, search posts, or send zaps. Requires NOSTR_NSEC and NOSTR_RELAYS env vars.
 ---
 
 # Nostr Scripts
