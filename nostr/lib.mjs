@@ -26,6 +26,76 @@ function bech32Decode(str) {
   return new Uint8Array(out);
 }
 
+// ── bech32 encode ────────────────────────────────────────────
+function convert8to5(data) {
+  let acc = 0, bits = 0;
+  const out = [];
+  for (const v of data) {
+    acc = (acc << 8) | v;
+    bits += 8;
+    while (bits >= 5) { bits -= 5; out.push((acc >> bits) & 0x1f); }
+  }
+  if (bits > 0) out.push((acc << (5 - bits)) & 0x1f);
+  return out;
+}
+
+function bech32Checksum(hrp, data5) {
+  const values = [...hrpExpand(hrp), ...data5];
+  const poly = bech32Polymod([...values, 0, 0, 0, 0, 0, 0]) ^ 1;
+  const checksum = [];
+  for (let i = 0; i < 6; i++) checksum.push((poly >> (5 * (5 - i))) & 31);
+  return checksum;
+}
+
+function hrpExpand(hrp) {
+  const ret = [];
+  for (const c of hrp) ret.push(c.charCodeAt(0) >> 5);
+  ret.push(0);
+  for (const c of hrp) ret.push(c.charCodeAt(0) & 31);
+  return ret;
+}
+
+function bech32Polymod(values) {
+  const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  let chk = 1;
+  for (const v of values) {
+    const b = chk >> 25;
+    chk = ((chk & 0x1ffffff) << 5) ^ v;
+    for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= GEN[i];
+  }
+  return chk;
+}
+
+function bech32Encode(hrp, bytes) {
+  const data5 = convert8to5(bytes);
+  const checksum = bech32Checksum(hrp, data5);
+  return hrp + '1' + [...data5, ...checksum].map(v => BECH32_CHARSET[v]).join('');
+}
+
+/** Encode event id hex → nevent1... (NIP-19 TLV) */
+export function encodeNevent(eventIdHex, relayHints = [], authorHex = null) {
+  const buf = [];
+  // TLV type 0: event id (32 bytes)
+  const idBytes = hexToBytes(eventIdHex);
+  buf.push(0, 32, ...idBytes);
+  // TLV type 1: relay hints
+  for (const r of relayHints) {
+    const rb = new TextEncoder().encode(r);
+    buf.push(1, rb.length, ...rb);
+  }
+  // TLV type 2: author pubkey
+  if (authorHex) {
+    const ab = hexToBytes(authorHex);
+    buf.push(2, 32, ...ab);
+  }
+  return bech32Encode('nevent', new Uint8Array(buf));
+}
+
+/** Encode pubkey hex → npub1... */
+export function encodeNpub(pubkeyHex) {
+  return bech32Encode('npub', hexToBytes(pubkeyHex));
+}
+
 /** nsec (bech32) or hex → hex private key */
 export function nsecToHex(nsec) {
   if (nsec.startsWith('nsec1')) return bytesToHex(bech32Decode(nsec));

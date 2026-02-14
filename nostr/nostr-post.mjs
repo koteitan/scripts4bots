@@ -7,7 +7,7 @@
 //   nostr-post --mention <pubkey-hex> "Hello"   メンション
 //   組み合わせ可: --reply <id> --mention <pk> "text"
 
-import { getRelays, getPriv, privToPub, signEvent, nostr_write, nostr_read } from './lib.mjs';
+import { getRelays, getPriv, privToPub, signEvent, nostr_write, nostr_read, encodeNevent } from './lib.mjs';
 
 let replyTo = null, quoteId = null;
 const mentions = [];
@@ -56,9 +56,10 @@ if (replyTo) {
 // Quote: NIP-18 style — add q tag + nostr:nevent in content
 if (quoteId) {
   tags.push(['q', quoteId]);
-  // Append nostr:note1... reference (simplified: just hex for now)
+  // Append nostr:nevent1... bech32 reference
+  const nevent = encodeNevent(quoteId);
   if (text) text += '\n';
-  text += `nostr:${quoteId}`;
+  text += `nostr:${nevent}`;
 }
 
 // Mentions: add p tags
