@@ -41,6 +41,17 @@ node nostr-read.mjs '{"kinds":[1],"limit":5}'
 ```
 Returns JSON array.
 
+### Search (NIP-50)
+```bash
+node nostr-search.mjs "ビットコイン"              # keyword search
+node nostr-search.mjs -n 5 "bitcoin"              # limit results
+node nostr-search.mjs --pubkey <npub> "lightning"  # filter by author
+node nostr-search.mjs --since 2026-02-01 "nostr"  # date filter
+node nostr-search.mjs --json "query"               # raw JSON output
+node nostr-search.mjs --relay wss://other "query"  # custom relay
+```
+Default search relay: `wss://search.nos.today`
+
 ### Zap (NIP-57)
 ```bash
 node nostr-zap.mjs --note <nevent1.../hex> --amount 21 --comment "⚡"
