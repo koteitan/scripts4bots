@@ -41,6 +41,17 @@ node nostr-read.mjs '{"kinds":[1],"limit":5}'
 ```
 Returns JSON array.
 
+### React (NIP-25)
+```bash
+node nostr-react.mjs <nevent/note/hex> "🔥"    # custom emoji
+node nostr-react.mjs <nevent/note/hex>           # default: +
+```
+
+### Repost (NIP-18)
+```bash
+node nostr-repost.mjs <nevent/note/hex>
+```
+
 ### Search (NIP-50)
 ```bash
 node nostr-search.mjs "ビットコイン"              # keyword search
