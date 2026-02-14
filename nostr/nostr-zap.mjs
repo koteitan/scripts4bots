@@ -112,8 +112,9 @@ if (!allowsNostr) {
 }
 
 // ── step 4: build kind:9734 zap request ─────────────────────
+// Use only 1 relay in zap request to keep invoice short
 const zapTags = [
-  ['relays', ...relays],
+  ['relays', relays[0]],
   ['amount', String(amountMsat)],
   ['p', pubkey],
 ];

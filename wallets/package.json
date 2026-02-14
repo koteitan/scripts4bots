@@ -1,0 +1,7 @@
+{
+  "name": "wallets",
+  "type": "module",
+  "dependencies": {
+    "@cashu/cashu-ts": "^2.5.3"
+  }
+}
