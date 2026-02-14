@@ -7,7 +7,7 @@
 //   nostr-post --mention <pubkey-hex> "Hello"   メンション
 //   組み合わせ可: --reply <id> --mention <pk> "text"
 
-import { getRelays, getPriv, privToPub, signEvent, nostr_write, nostr_read, encodeNevent } from './lib.mjs';
+import { getRelays, getPriv, privToPub, signEvent, nostr_write, nostr_read, encodeNevent, toHex } from './lib.mjs';
 
 let replyTo = null, quoteId = null;
 const mentions = [];
@@ -15,9 +15,9 @@ const textParts = [];
 
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--reply' && args[i + 1]) { replyTo = args[++i]; }
-  else if (args[i] === '--quote' && args[i + 1]) { quoteId = args[++i]; }
-  else if (args[i] === '--mention' && args[i + 1]) { mentions.push(args[++i]); }
+  if (args[i] === '--reply' && args[i + 1]) { replyTo = toHex(args[++i]); }
+  else if (args[i] === '--quote' && args[i + 1]) { quoteId = toHex(args[++i]); }
+  else if (args[i] === '--mention' && args[i + 1]) { mentions.push(toHex(args[++i])); }
   else { textParts.push(args[i]); }
 }
 

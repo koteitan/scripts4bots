@@ -9,15 +9,15 @@
 //   2. LNURL pay endpoint に kind:9734 zap request を送る
 //   3. 返ってきた Lightning invoice を表示（支払いは手動 or 別ツール）
 
-import { getRelays, getPriv, privToPub, signEvent, nostr_read } from './lib.mjs';
+import { getRelays, getPriv, privToPub, signEvent, nostr_read, toHex } from './lib.mjs';
 
 // ── parse args ───────────────────────────────────────────────
 let noteId = null, pubkey = null, amount = null, comment = '';
 const args = process.argv.slice(2);
 
 for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--note' && args[i + 1]) noteId = args[++i];
-  else if (args[i] === '--pubkey' && args[i + 1]) pubkey = args[++i];
+  if (args[i] === '--note' && args[i + 1]) noteId = toHex(args[++i]);
+  else if (args[i] === '--pubkey' && args[i + 1]) pubkey = toHex(args[++i]);
   else if (args[i] === '--amount' && args[i + 1]) amount = parseInt(args[++i]);
   else if (args[i] === '--comment' && args[i + 1]) comment = args[++i];
 }

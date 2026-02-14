@@ -96,10 +96,23 @@ export function encodeNpub(pubkeyHex) {
   return bech32Encode('npub', hexToBytes(pubkeyHex));
 }
 
+/** Any bech32 nostr id (nsec/npub/note/nevent) or hex → hex */
+export function toHex(input) {
+  if (/^[0-9a-f]{64}$/i.test(input)) return input.toLowerCase();
+  if (input.startsWith('nsec1') || input.startsWith('npub1') || input.startsWith('note1')) {
+    return bytesToHex(bech32Decode(input));
+  }
+  if (input.startsWith('nevent1')) {
+    // TLV: type 0 = event id
+    const bytes = bech32Decode(input);
+    if (bytes[0] === 0 && bytes[1] === 32) return bytesToHex(bytes.slice(2, 34));
+  }
+  return input; // fallback
+}
+
 /** nsec (bech32) or hex → hex private key */
 export function nsecToHex(nsec) {
-  if (nsec.startsWith('nsec1')) return bytesToHex(bech32Decode(nsec));
-  return nsec;
+  return toHex(nsec);
 }
 
 /** hex private key → hex public key (x-only schnorr) */

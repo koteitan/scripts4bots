@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // nostr-tl — タイムライン取得
 // Usage: nostr-tl [-n <number>] [--pubkey <hex>] [--me]
-import { getRelays, getPriv, privToPub, nostr_read } from './lib.mjs';
+import { getRelays, getPriv, privToPub, nostr_read, toHex } from './lib.mjs';
 
 let limit = 20;
 let pubkey = null;
@@ -9,7 +9,7 @@ const args = process.argv.slice(2);
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '-n' && args[i + 1]) { limit = parseInt(args[++i]) || 20; }
-  else if (args[i] === '--pubkey' && args[i + 1]) { pubkey = args[++i]; }
+  else if (args[i] === '--pubkey' && args[i + 1]) { pubkey = toHex(args[++i]); }
   else if (args[i] === '--me') { pubkey = privToPub(getPriv()); }
 }
 
