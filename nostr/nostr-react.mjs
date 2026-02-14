@@ -17,6 +17,7 @@ if (!evts.length) { console.error('Event not found'); process.exit(1); }
 const target = evts[0];
 
 const ev = signEvent({
+  pubkey: privToPub(priv),
   kind: 7,
   created_at: Math.floor(Date.now() / 1000),
   tags: [

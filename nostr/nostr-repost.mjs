@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // NIP-18 repost (kind 6)
 // Usage: nostr-repost.mjs <nevent/note/hex>
-import { getRelays, getPriv, nostr_read, nostr_write, signEvent, toHex, encodeNevent } from './lib.mjs';
+import { getRelays, getPriv, privToPub, nostr_read, nostr_write, signEvent, toHex, encodeNevent } from './lib.mjs';
 
 const args = process.argv.slice(2);
 if (!args[0]) { console.error('Usage: nostr-repost.mjs <note-id>'); process.exit(1); }
@@ -16,6 +16,7 @@ if (!evts.length) { console.error('Event not found'); process.exit(1); }
 const target = evts[0];
 
 const ev = signEvent({
+  pubkey: privToPub(priv),
   kind: 6,
   created_at: Math.floor(Date.now() / 1000),
   tags: [
