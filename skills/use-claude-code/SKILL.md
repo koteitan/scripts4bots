@@ -48,7 +48,7 @@ node {baseDir}/scripts/claude-hook.js --cwd /path/to/project "プロンプト内
 **Features:**
 - ✅ Runs Claude Code with `-p --dangerously-skip-permissions`
 - ✅ Automatically notifies Discord webhook when completed
-- ✅ Streams stdout/stderr in real-time
+- ✅ Captures stdout/stderr (note: `claude -p` produces no output until completion)
 - ✅ Reports exit code and elapsed time
 
 **Environment variables:**
@@ -119,6 +119,64 @@ gh run list --repo user/repo --limit 3
 gh run view <run-id> --repo user/repo
 ```
 
+## Using from OpenClaw
+
+When running `claude-hook.js` from OpenClaw agents, use the `exec` tool with background mode to avoid blocking your session.
+
+### Recommended pattern: exec with background
+
+```javascript
+// Start the task in background
+const result = await exec({
+  command: `node ${baseDir}/scripts/claude-hook.js --cwd ~/project "タスク内容"`,
+  background: true,
+  yieldMs: 1000  // Yield after 1 second
+});
+
+// Save session ID for later reference
+const sessionId = result.sessionId;
+```
+
+### Checking output after completion
+
+```javascript
+// Check if process is still running
+const status = await process({
+  action: "poll",
+  sessionId: sessionId
+});
+
+// Read stdout/stderr after completion
+const log = await process({
+  action: "log",
+  sessionId: sessionId
+});
+```
+
+### Important notes about stdout
+
+- **`claude -p` produces no output until completion** (not real-time streaming)
+- `claude-hook.js` inherits this behavior via `stdio: 'inherit'`
+- Discord webhook notification is sent when task completes
+- Use `process` tool's `log` action to read captured output
+- No automatic notification to OpenClaw session (Discord only)
+
+### Alternative: Sub-agent approach
+
+If you prefer automatic reporting back to your session, spawn a sub-agent:
+
+```javascript
+await sessions_spawn({
+  task: `Use claude-hook.js to implement [task description]. Report results back to me.`,
+  agentId: "main"  // or your preferred agent
+});
+```
+
+Sub-agents will:
+- Execute the task in isolation
+- Read claude's output when it completes
+- Report results back to your session automatically
+
 ## Advanced: Custom notification integration
 
 See [references/README.md](references/README.md) for:
@@ -142,4 +200,6 @@ See [references/README.md](references/README.md) for:
 
 - Claude Code's Stop hook does NOT fire when using `-p --dangerously-skip-permissions`
 - The wrapper script works around this by spawning Claude and watching the exit event
+- **Output behavior:** `claude -p` produces no stdout/stderr until task completes (this is NOT real-time streaming, despite the script using `stdio: 'inherit'`)
 - Notifications are sent to Discord webhook (can be customized via environment variables)
+- When using from OpenClaw, captured output can be read via `process` tool after completion
