@@ -1,59 +1,45 @@
 # scripts4bots
 
-Nostr & Lightning scripts for bot use. Raw WebSocket, no nostr-tools.
+A collection of [Agent Skills](https://agentskills.io) for Nostr, Lightning wallets, and development tools.
 
-## Setup
+## Skills
+
+This repository contains three OpenClaw-compatible Agent Skills:
+
+- **[nostr](skills/nostr/)** - Post, read, reply, quote, mention, react, repost, search, and zap on Nostr via raw WebSocket scripts
+- **[wallet](skills/wallet/)** - Pay and receive Lightning invoices via Cashu ecash or LNbits wallets
+- **[use-claude-code](skills/use-claude-code/)** - Use Claude Code CLI for automated coding tasks with completion notifications
+
+Each skill directory contains:
+- `SKILL.md` - Skill definition and documentation
+- `scripts/` - Executable scripts and tools
+- `references/` - Supporting documentation (when applicable)
+
+## Installation
+
+To use these skills with OpenClaw:
 
 ```bash
-npm install          # run in both nostr/ and wallets/
+git clone git@github.com:koteitan/scripts4bots.git ~/.openclaw/skills/scripts4bots
+cd ~/.openclaw/skills/scripts4bots/skills/nostr/scripts && npm install
+cd ~/.openclaw/skills/scripts4bots/skills/wallet/scripts && npm install
 ```
 
-### Environment
+Alternatively, clone individual skills or install them via OpenClaw's skill management commands.
 
-```bash
-export NOSTR_NSEC="nsec1..."
-export NOSTR_RELAYS="wss://r.kojira.io,wss://relay.damus.io,wss://relay-jp.nostr.wirednet.jp,wss://yabu.me"
-export CASHU_MINT="https://mint.coinos.io"
-export LNBITS_URL="https://demo.lnbits.com"
-export LNBITS_ADMIN_KEY="..."
-export LNBITS_INVOICE_KEY="..."
-```
+## Usage
 
-## Nostr (`nostr/`)
+Each skill's `SKILL.md` contains detailed usage instructions, including:
+- Required environment variables
+- Available commands
+- Examples
+- References to relevant protocols (NIPs, APIs, etc.)
 
-All commands accept hex or bech32 (npub/nsec/note/nevent).
+## Resources
 
-| Script | Description | NIP |
-|--------|-------------|-----|
-| `nostr-tl.mjs` | Timeline (with `--since/--until/--pubkey/--me`) | — |
-| `nostr-post.mjs` | Post, reply, quote, mention | — |
-| `nostr-read.mjs` | Generic REQ (JSON filter) | — |
-| `nostr-react.mjs` | Reaction (emoji) | NIP-25 |
-| `nostr-repost.mjs` | Repost | NIP-18 |
-| `nostr-search.mjs` | Full-text search | NIP-50 |
-| `nostr-zap.mjs` | Zap request → Lightning invoice | NIP-57 |
-| `lib.mjs` | Shared library (read/write/sign/bech32) | — |
-
-## Wallets (`wallets/`)
-
-JSON output for easy piping.
-
-| Script | Description |
-|--------|-------------|
-| `cashu.mjs` | Cashu ecash (balance/pay/invoice/claim/send/receive) |
-| `lnbits.mjs` | LNbits (balance/pay/invoice) |
-
-### Zap Payment Flow
-
-Cashu mints have a ~1000 char invoice limit. NIP-57 zap invoices are ~1400 chars. Workaround:
-
-1. `lnbits.mjs invoice <amount+10>` → short invoice
-2. `cashu.mjs pay <short-invoice>` → fund LNbits
-3. `lnbits.mjs pay <long-zap-invoice>` → pay zap
-
-## OpenClaw Skills
-
-Both `nostr/SKILL.md` and `wallets/SKILL.md` are OpenClaw-compatible skill definitions.
+- [AgentSkills.io](https://agentskills.io) - Agent Skills specification
+- [OpenClaw Skills Documentation](https://docs.openclaw.ai/tools/skills)
+- [OpenClaw](https://openclaw.ai)
 
 ## License
 

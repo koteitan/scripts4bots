@@ -103,9 +103,20 @@ export function toHex(input) {
     return bytesToHex(bech32Decode(input));
   }
   if (input.startsWith('nevent1')) {
-    // TLV: type 0 = event id
+    // TLV: parse all entries and find type 0 (event id)
     const bytes = bech32Decode(input);
-    if (bytes[0] === 0 && bytes[1] === 32) return bytesToHex(bytes.slice(2, 34));
+    let i = 0;
+    while (i < bytes.length) {
+      if (i + 2 > bytes.length) break; // need at least type + length
+      const type = bytes[i];
+      const length = bytes[i + 1];
+      if (i + 2 + length > bytes.length) break; // incomplete entry
+      if (type === 0 && length === 32) {
+        // found event id
+        return bytesToHex(bytes.slice(i + 2, i + 2 + length));
+      }
+      i += 2 + length; // skip to next entry
+    }
   }
   return input; // fallback
 }
