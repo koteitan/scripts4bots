@@ -60,9 +60,38 @@ for (const event of filteredEvents.slice(0, 10)) {
 // Update hist-file with current timestamp
 if (checkHistFile) {
   const now = Math.floor(Date.now() / 1000);
-  const lines = fs.existsSync(checkHistFile) 
-    ? fs.readFileSync(checkHistFile, 'utf-8').split('\n') 
-    : ['# replied IDs:', ''];  // Add empty string to ensure newline after header
+  let lines;
+  
+  if (fs.existsSync(checkHistFile)) {
+    // Existing hist-file
+    lines = fs.readFileSync(checkHistFile, 'utf-8').split('\n');
+  } else {
+    // First-time creation: fetch past replies to populate replied IDs
+    console.error('🔍 First run: fetching past replies to initialize hist-file...');
+    const myPosts = await nostr_read(RELAYS, [{
+      kinds: [1],
+      authors: [myPubkey],
+      limit: 100
+    }]);
+    
+    // Extract all e tags (replied-to event IDs)
+    const pastRepliedIds = new Set();
+    for (const post of myPosts) {
+      for (const tag of post.tags) {
+        if (tag[0] === 'e' && tag[1]) {
+          pastRepliedIds.add(tag[1]);
+        }
+      }
+    }
+    
+    console.error(`📝 Found ${pastRepliedIds.size} past replied event IDs`);
+    
+    // Initialize lines with header and past replied IDs
+    lines = ['# replied IDs:', ''];
+    for (const id of pastRepliedIds) {
+      lines.push(id);
+    }
+  }
   
   // Update or add "Last check" line
   let updated = false;
