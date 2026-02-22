@@ -62,7 +62,7 @@ if (checkHistFile) {
   const now = Math.floor(Date.now() / 1000);
   const lines = fs.existsSync(checkHistFile) 
     ? fs.readFileSync(checkHistFile, 'utf-8').split('\n') 
-    : ['# replied IDs:'];
+    : ['# replied IDs:', ''];  // Add empty string to ensure newline after header
   
   // Update or add "Last check" line
   let updated = false;
