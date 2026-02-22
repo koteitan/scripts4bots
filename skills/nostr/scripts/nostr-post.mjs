@@ -6,23 +6,64 @@
 //   nostr-post --quote <event-id> "Hello"       引用リポスト
 //   nostr-post --mention <pubkey-hex> "Hello"   メンション
 //   組み合わせ可: --reply <id> --mention <pk> "text"
+//
+// Reply with deduplication:
+//   nostr-post --reply --check-hist <file> <event-id> "Hello"
+//   nostr-post --reply --force <event-id> "Hello"
 
 import { getRelays, getPriv, privToPub, signEvent, nostr_write, nostr_read, encodeNevent, toHex } from './lib.mjs';
+import fs from 'fs';
 
 let replyTo = null, quoteId = null;
 const mentions = [];
 const textParts = [];
+let checkHistFile = null;
+let forceReply = false;
 
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--reply' && args[i + 1]) { replyTo = toHex(args[++i]); }
   else if (args[i] === '--quote' && args[i + 1]) { quoteId = toHex(args[++i]); }
   else if (args[i] === '--mention' && args[i + 1]) { mentions.push(toHex(args[++i])); }
+  else if (args[i] === '--check-hist' && args[i + 1]) { checkHistFile = args[++i]; }
+  else if (args[i] === '--force') { forceReply = true; }
   else { textParts.push(args[i]); }
 }
 
 let text = textParts.join(' ');
-if (!text && !quoteId) { console.error('Usage: nostr-post [--reply <id>] [--quote <id>] [--mention <pk>] "text"'); process.exit(1); }
+if (!text && !quoteId) { 
+  console.error('Usage: nostr-post [--reply <id>] [--quote <id>] [--mention <pk>] "text"');
+  console.error('Reply deduplication: --reply requires --check-hist <file> or --force');
+  process.exit(1); 
+}
+
+// Reply requires --check-hist or --force
+if (replyTo && !checkHistFile && !forceReply) {
+  console.error('❌ Error: --reply requires --check-hist <file> or --force');
+  console.error('   Use --check-hist to prevent duplicate replies, or --force to skip check');
+  process.exit(1);
+}
+
+// Check hist-file if --check-hist is provided
+if (replyTo && checkHistFile) {
+  let repliedIds = [];
+  
+  // Read hist-file
+  if (fs.existsSync(checkHistFile)) {
+    const lines = fs.readFileSync(checkHistFile, 'utf-8').split('\n');
+    repliedIds = lines
+      .filter(line => line && !line.startsWith('#'))
+      .map(line => line.trim());
+  }
+  
+  // Check if already replied
+  if (repliedIds.includes(replyTo)) {
+    console.error(`❌ Error: Already replied to event ${replyTo.slice(0, 16)}...`);
+    console.error(`   (found in ${checkHistFile})`);
+    console.error(`   Use --force to reply anyway`);
+    process.exit(1);
+  }
+}
 
 const priv = getPriv();
 const pub = privToPub(priv);
@@ -85,3 +126,15 @@ const { ok, fail } = await nostr_write(relays, event);
 if (ok.length) console.log(`✅ OK: ${ok.join(', ')}`);
 if (fail.length) console.log(`❌ Fail: ${fail.join(', ')}`);
 if (!ok.length && !fail.length) console.log('⚠️  No responses received');
+
+// Append to hist-file on successful reply
+if (replyTo && checkHistFile && ok.length > 0) {
+  // Ensure hist-file exists with header
+  if (!fs.existsSync(checkHistFile)) {
+    fs.writeFileSync(checkHistFile, '# Last check: (managed by check-replies.mjs)\n# replied IDs:\n', 'utf-8');
+  }
+  
+  // Append replied event ID
+  fs.appendFileSync(checkHistFile, `${replyTo}\n`, 'utf-8');
+  console.log(`📝 Added ${replyTo.slice(0, 16)}... to ${checkHistFile}`);
+}
