@@ -3,6 +3,35 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import WebSocket from 'ws';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+// ── .env auto-loader ─────────────────────────────────────────
+// Load .env from workspace root (3 levels up: scripts/ → nostr/ → skills/ → workspace/)
+{
+  const _scriptsDir = dirname(fileURLToPath(import.meta.url));
+  const _workspaceRoot = resolve(_scriptsDir, '../../..');
+  const _envPath = resolve(_workspaceRoot, '.env');
+  if (fs.existsSync(_envPath)) {
+    for (const line of fs.readFileSync(_envPath, 'utf8').split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1).trim();
+      if (key && !process.env[key]) process.env[key] = value;
+    }
+  }
+  // If NOSTR_NSEC_FILE is set, read NSEC from that file
+  if (process.env.NOSTR_NSEC_FILE && !process.env.NOSTR_NSEC) {
+    const nsecFile = process.env.NOSTR_NSEC_FILE.replace(/^~/, process.env.HOME || '');
+    if (fs.existsSync(nsecFile)) {
+      process.env.NOSTR_NSEC = fs.readFileSync(nsecFile, 'utf8').trim();
+    }
+  }
+}
 
 // ── key helpers ──────────────────────────────────────────────
 const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
