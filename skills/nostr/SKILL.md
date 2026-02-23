@@ -15,31 +15,32 @@ Use when the user asks to:
 
 ## Requirements
 
-**方法1（推奨）：ワークスペースルートに `.env` を置く**
+**Option A: `.env` file (recommended for agents)**
 
-```bash
-# ~/.openclaw/workspace/.env
-NOSTR_NSEC_FILE=~/katte/nostr/nsec   # 秘密鍵ファイルのパス（NOSTR_NSECより安全）
-NOSTR_RELAYS=wss://r.kojira.io,wss://relay.damus.io,...
+Place a `.env` at your workspace root (3 levels above `scripts/`):
 ```
-
-lib.mjs が起動時に自動で読み込む（既存の環境変数・コマンドライン引数が優先）。
-`.gitignore` に `.env` が追加済みなので git に含まれない。
-
-**方法2：コマンドライン引数（ワークスペースなしのテスト等に）**
-
-```bash
-node check-replies.mjs --nsec nsec1... --relay "wss://relay.damus.io"
+NOSTR_NSEC_FILE=~/path/to/nsec   # path to nsec file (more secure than inline key)
+NOSTR_RELAYS=wss://relay.damus.io,wss://yabu.me,...
 ```
+Or with nsec directly (`.gitignore` already excludes `.env`):
+```
+NOSTR_NSEC=nsec1...
+NOSTR_RELAYS=wss://...
+```
+`lib.mjs` automatically loads this file on startup — no manual env setup needed.
 
-**方法3：環境変数（従来通り）**
-
+**Option B: Environment variables**
 ```bash
 export NOSTR_NSEC="nsec1..."
 export NOSTR_RELAYS="wss://r.kojira.io,wss://relay.damus.io,..."
 ```
 
-**優先順位:** コマンドライン引数 > 環境変数 > `.env` ファイル
+**Option C: Command-line args (highest priority, useful for testing without a workspace)**
+```bash
+node check-replies.mjs --nsec nsec1... --relay "wss://relay.damus.io,wss://yabu.me"
+```
+
+Priority: `--nsec`/`--relay` args > env vars > `.env` file
 
 ## Setup
 
@@ -54,6 +55,7 @@ All commands accept hex or bech32 (npub/nsec/note/nevent).
 
 | Script | Description | NIP |
 |--------|-------------|-----|
+| `check-replies.mjs` | Check replies addressed to you (with dedup & thread context) | — |
 | `nostr-tl.mjs` | Timeline (with `--since/--until/--pubkey/--me`) | — |
 | `nostr-post.mjs` | Post, reply, quote, mention | — |
 | `nostr-read.mjs` | Generic REQ (JSON filter) | — |
@@ -66,6 +68,21 @@ All commands accept hex or bech32 (npub/nsec/note/nevent).
 | `lib.mjs` | Shared library (read/write/sign/bech32) | — |
 
 ## Usage Examples
+
+### Check Replies
+```bash
+# With .env (recommended for agents)
+node check-replies.mjs --check-hist ~/memory/nostr-replied.txt
+
+# With command-line args (for testing without workspace .env)
+node check-replies.mjs --nsec nsec1... --relay "wss://relay.damus.io" --since 1700000000
+
+# Check replies for another npub (read-only, no NOSTR_NSEC needed)
+node check-replies.mjs --npub npub1... --since 1700000000
+
+# Disable thread context display
+node check-replies.mjs --no-thread
+```
 
 ### Timeline
 ```bash
