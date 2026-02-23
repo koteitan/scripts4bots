@@ -7,11 +7,13 @@
  *   node claude-hook.js "プロンプト内容"
  *   node claude-hook.js --cwd /path/to/project "プロンプト内容"
  *   node claude-hook.js -t THREAD_ID -u USER_ID "プロンプト内容"
+ *   node claude-hook.js "プロンプト内容" -- --continue
  * 
  * Options:
  *   --cwd <path>       Working directory (default: current directory)
  *   -t, --thread <id>  Discord thread ID (default: env DISCORD_THREAD_ID or お天気アプリ)
  *   -u, --user <id>    Mention user ID (default: env DISCORD_MENTION_USER_ID or かってちゃん)
+ *   -- <opts...>       Extra options passed directly to claude (e.g. -- --continue)
  * 
  * Environment variables:
  *   DISCORD_WEBHOOK_URL       Discord webhook URL
@@ -73,7 +75,12 @@ async function notifyOpenClaw(exitCode, elapsed, threadId, userId) {
 }
 
 function main() {
-  const args = process.argv.slice(2);
+  const allArgs = process.argv.slice(2);
+  
+  // Split on '--' to separate claude-hook options from extra claude options
+  const doubleDashIndex = allArgs.indexOf('--');
+  const args = doubleDashIndex !== -1 ? allArgs.slice(0, doubleDashIndex) : allArgs;
+  const claudeExtraOpts = doubleDashIndex !== -1 ? allArgs.slice(doubleDashIndex + 1) : [];
   
   // Parse arguments
   let cwd = process.cwd();
@@ -114,12 +121,16 @@ function main() {
   console.error(`[Hook] Thread ID: ${threadId}`);
   console.error(`[Hook] Mention user ID: ${userId}`);
   console.error(`[Hook] Prompt: ${prompt.substring(0, 80)}${prompt.length > 80 ? '...' : ''}`);
+  if (claudeExtraOpts.length > 0) {
+    console.error(`[Hook] Extra claude options: ${claudeExtraOpts.join(' ')}`);
+  }
   
   const startTime = Date.now();
   
   const proc = spawn('claude', [
     '-p',
     '--dangerously-skip-permissions',
+    ...claudeExtraOpts,
     prompt
   ], {
     cwd,
