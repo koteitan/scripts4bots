@@ -162,7 +162,7 @@ async function notifyDiscordReply(event, webhookUrl) {
   const date = new Date(event.created_at * 1000).toISOString();
   const shortId = event.id.slice(0, 12);
   const content = event.content.slice(0, 1000);
-  let text = `🔔 **Nostr リプライ**\n\n[${date}] ${shortId}...\n${content}`;
+  let text = `🔔 **Nostr リプライ**\n\n[${date}] \`${event.id}\`\n${content}`;
 
   if (!noThread) {
     const rootId = getRootId(event);
