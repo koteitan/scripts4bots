@@ -36,6 +36,8 @@ import fs from 'fs';
       const value = trimmed.slice(eqIdx + 1).trim();
       if (key && !_cliSet.has(key)) process.env[key] = value;
     }
+  } else {
+    console.warn(`[lib] Warning: .env not found at ${_envPath}`);
   }
 
   // 3. If NOSTR_NSEC_FILE is set, read NSEC from that file
