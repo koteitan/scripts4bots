@@ -12,6 +12,29 @@ let sinceTimestamp = null;
 let noThread = false;
 
 const args = process.argv.slice(2);
+
+if (args.includes('--help') || args.includes('-h')) {
+  console.log(`Usage: node check-replies.mjs [OPTIONS]
+
+Check for Nostr replies addressed to you.
+
+Options:
+  --check-hist <file>  Path to reply history file (for deduplication & auto-since)
+  --since <timestamp>  Only fetch events after this Unix timestamp
+  --no-thread          Disable thread context display
+  -h, --help           Show this help message
+
+Environment variables:
+  NOSTR_NSEC    Your Nostr private key (hex or nsec)
+  NOSTR_RELAYS  Comma-separated list of relay URLs
+
+Examples:
+  node check-replies.mjs --check-hist ~/.openclaw/memory/nostr-replied.txt
+  node check-replies.mjs --since 1700000000 --no-thread
+`);
+  process.exit(0);
+}
+
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--check-hist' && i + 1 < args.length) {
     checkHistFile = args[i + 1];
