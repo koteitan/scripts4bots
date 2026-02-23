@@ -218,7 +218,7 @@ async function startHookMode(relays, pubkey, webhookUrl) {
     }
 
     ws.on('open', () => {
-      const filter = { kinds: [1], '#p': [pubkey], limit: 0 };
+      const filter = { kinds: [1], '#p': [pubkey], since: Math.floor(Date.now() / 1000) };
       ws.send(JSON.stringify(['REQ', subId, filter]));
       console.error(`  Connected: ${url}`);
     });

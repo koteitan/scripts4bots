@@ -64,7 +64,7 @@ if (hookMode) {
     }
 
     ws.on('open', () => {
-      const filter = { kinds: [1], search: query, limit: 0 };
+      const filter = { kinds: [1], search: query, since: Math.floor(Date.now() / 1000) };
       if (pubkey) filter.authors = [pubkey];
       ws.send(JSON.stringify(['REQ', subId, filter]));
       console.error(`  Connected: ${relay}`);
