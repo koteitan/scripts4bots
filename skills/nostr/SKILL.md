@@ -15,11 +15,31 @@ Use when the user asks to:
 
 ## Requirements
 
-Environment variables:
+**方法1（推奨）：ワークスペースルートに `.env` を置く**
+
+```bash
+# ~/.openclaw/workspace/.env
+NOSTR_NSEC_FILE=~/katte/nostr/nsec   # 秘密鍵ファイルのパス（NOSTR_NSECより安全）
+NOSTR_RELAYS=wss://r.kojira.io,wss://relay.damus.io,...
+```
+
+lib.mjs が起動時に自動で読み込む（既存の環境変数・コマンドライン引数が優先）。
+`.gitignore` に `.env` が追加済みなので git に含まれない。
+
+**方法2：コマンドライン引数（ワークスペースなしのテスト等に）**
+
+```bash
+node check-replies.mjs --nsec nsec1... --relay "wss://relay.damus.io"
+```
+
+**方法3：環境変数（従来通り）**
+
 ```bash
 export NOSTR_NSEC="nsec1..."
-export NOSTR_RELAYS="wss://r.kojira.io,wss://relay.damus.io,wss://relay-jp.nostr.wirednet.jp,wss://yabu.me"
+export NOSTR_RELAYS="wss://r.kojira.io,wss://relay.damus.io,..."
 ```
+
+**優先順位:** コマンドライン引数 > 環境変数 > `.env` ファイル
 
 ## Setup
 
