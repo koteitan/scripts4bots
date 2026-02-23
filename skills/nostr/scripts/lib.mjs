@@ -8,8 +8,19 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 // ── .env auto-loader ─────────────────────────────────────────
-// Load .env from workspace root (3 levels up: scripts/ → nostr/ → skills/ → workspace/)
+// Priority: --nsec/--relay args > env vars > .env file
 {
+  // 1. Check --nsec and --relay in command line args (highest priority)
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--nsec' && i + 1 < argv.length) {
+      process.env.NOSTR_NSEC = argv[i + 1]; i++;
+    } else if (argv[i] === '--relay' && i + 1 < argv.length) {
+      process.env.NOSTR_RELAYS = argv[i + 1]; i++;
+    }
+  }
+
+  // 2. Load .env from workspace root (3 levels up: scripts/ → nostr/ → skills/ → workspace/)
   const _scriptsDir = dirname(fileURLToPath(import.meta.url));
   const _workspaceRoot = resolve(_scriptsDir, '../../..');
   const _envPath = resolve(_workspaceRoot, '.env');
@@ -24,7 +35,8 @@ import fs from 'fs';
       if (key && !process.env[key]) process.env[key] = value;
     }
   }
-  // If NOSTR_NSEC_FILE is set, read NSEC from that file
+
+  // 3. If NOSTR_NSEC_FILE is set, read NSEC from that file
   if (process.env.NOSTR_NSEC_FILE && !process.env.NOSTR_NSEC) {
     const nsecFile = process.env.NOSTR_NSEC_FILE.replace(/^~/, process.env.HOME || '');
     if (fs.existsSync(nsecFile)) {
