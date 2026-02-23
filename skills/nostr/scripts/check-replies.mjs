@@ -198,6 +198,7 @@ async function notifyDiscordReply(event, webhookUrl) {
 // Hook mode: stay alive and notify Discord on new replies
 async function startHookMode(relays, pubkey, webhookUrl) {
   console.error(`🪝 Hook mode started. Listening for replies on ${relays.length} relay(s)...`);
+  const seenIds = new Set();
 
   function connectRelay(url) {
     let ws;
@@ -207,7 +208,6 @@ async function startHookMode(relays, pubkey, webhookUrl) {
       return;
     }
     const subId = 'hook-' + Math.random().toString(36).slice(2, 8);
-    let eoseSeen = false;
     let reconnecting = false;
 
     function scheduleReconnect() {
@@ -227,11 +227,11 @@ async function startHookMode(relays, pubkey, webhookUrl) {
       let msg;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
       if (msg[0] === 'EOSE' && msg[1] === subId) {
-        eoseSeen = true;
         console.error(`  EOSE received: ${url}`);
       } else if (msg[0] === 'EVENT' && msg[1] === subId) {
-        if (!eoseSeen) return;
         const event = msg[2];
+        if (seenIds.has(event.id)) return;
+        seenIds.add(event.id);
         if (event.pubkey === myPubkey) return;
         const [botIgnore, tooNew] = await Promise.all([
           shouldIgnoreDueToBot(event),
