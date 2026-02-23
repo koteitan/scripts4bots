@@ -12,23 +12,33 @@ if (args.includes('--help') || args.includes('-h')) {
 Check for Nostr replies addressed to you.
 
 Options:
-  --check-hist <file>  Path to reply history file (for deduplication & auto-since)
-  --since <timestamp>  Only fetch events after this Unix timestamp
-  --no-thread          Disable thread context display
-  --npub <npub>        Check replies for this npub (read-only, no NOSTR_NSEC needed)
-  --hook               Stay alive and notify Discord via webhook on new replies
-  -h, --help           Show this help message
+  --check-hist <file>          Path to reply history file (for deduplication & auto-since)
+  --since <timestamp>          Only fetch events after this Unix timestamp
+  --no-thread                  Disable thread context display
+  --npub <npub>                Check replies for this npub (read-only, no NOSTR_NSEC needed)
+  --hook                       Stay alive and notify Discord via webhook on new replies
+  --ignore-pubkeys <hex,...>   Comma-separated hex pubkeys (or npubs) to treat as known bots
+  -h, --help                   Show this help message
+
+Spam/Loop filters (applied in both hook and normal mode):
+  - Self-reply filter:  events from your own pubkey are always skipped
+  - Bot+depth filter:   if a thread contains a known bot pubkey (via --ignore-pubkeys or
+                        NOSTR_HOOK_IGNORE_PUBKEYS) and the event's thread index >= 5, skip
+  - Account age filter: accounts with kind:0 created within 5 days are skipped;
+                        accounts with no kind:0 are treated as new and skipped
 
 Environment variables:
-  NOSTR_NSEC                   Your Nostr private key (hex or nsec) — not required with --npub
-  NOSTR_RELAYS                 Comma-separated list of relay URLs
-  DISCORD_HOOK_FOR_NOSTR_REPLY Discord Webhook URL (required with --hook)
+  NOSTR_NSEC                       Your Nostr private key (hex or nsec) — not required with --npub
+  NOSTR_RELAYS                     Comma-separated list of relay URLs
+  DISCORD_HOOK_FOR_NOSTR_REPLY     Discord Webhook URL (required with --hook)
+  NOSTR_HOOK_IGNORE_PUBKEYS        Comma-separated hex pubkeys (or npubs) of known bots
 
 Examples:
   node check-replies.mjs --check-hist ~/.openclaw/memory/nostr-replied.txt
   node check-replies.mjs --since 1700000000 --no-thread
   node check-replies.mjs --npub npub1xxx... --since 1700000000
   node check-replies.mjs --hook
+  node check-replies.mjs --hook --ignore-pubkeys hex1,hex2
 `);
   process.exit(0);
 }
@@ -41,6 +51,7 @@ let sinceTimestamp = null;
 let noThread = false;
 let npubOpt = null;
 let hookMode = false;
+let ignorePubkeysArg = '';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--check-hist' && i + 1 < args.length) {
@@ -56,8 +67,21 @@ for (let i = 0; i < args.length; i++) {
     i++;
   } else if (args[i] === '--hook') {
     hookMode = true;
+  } else if (args[i] === '--ignore-pubkeys' && i + 1 < args.length) {
+    ignorePubkeysArg = args[i + 1];
+    i++;
   }
 }
+
+// Build ignorePubkeys set (merge CLI arg and env var)
+const ignorePubkeys = new Set(
+  [ignorePubkeysArg, process.env.NOSTR_HOOK_IGNORE_PUBKEYS || '']
+    .join(',')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => { try { return toHex(s); } catch { return s; } })
+);
 
 // Resolve pubkey: --npub takes priority, otherwise use NOSTR_NSEC
 let myPubkey;
@@ -104,6 +128,32 @@ async function fetchThread(rootId, currentEventId) {
     return unique.length > 10 ? unique.slice(-10) : unique;
   } catch {
     return null;
+  }
+}
+
+// Filter: skip if thread contains a known bot and current event's thread index >= 5
+async function shouldIgnoreDueToBot(event) {
+  if (ignorePubkeys.size === 0) return false;
+  const rootId = getRootId(event);
+  if (!rootId) return false;
+  const threadEvents = await fetchThread(rootId, event.id);
+  if (!threadEvents) return false;
+  const hasBot = threadEvents.some(e => ignorePubkeys.has(e.pubkey));
+  if (!hasBot) return false;
+  const idx = threadEvents.findIndex(e => e.id === event.id);
+  return idx >= 5;
+}
+
+// Filter: skip if account kind:0 created within 5 days (or no kind:0)
+async function isAccountTooNew(pubkeyHex) {
+  const FIVE_DAYS = 5 * 24 * 60 * 60;
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    const profileEvents = await nostr_read(RELAYS, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }]);
+    if (profileEvents.length === 0) return true; // kind:0なし = 新規扱い
+    return (now - profileEvents[0].created_at) < FIVE_DAYS;
+  } catch {
+    return false; // エラー時は通知する（false-negative側に倒す）
   }
 }
 
@@ -179,7 +229,17 @@ async function startHookMode(relays, pubkey, webhookUrl) {
       if (msg[0] === 'EOSE' && msg[1] === subId) {
         eoseSeen = true;
       } else if (msg[0] === 'EVENT' && msg[1] === subId && eoseSeen) {
-        await notifyDiscordReply(msg[2], webhookUrl);
+        const event = msg[2];
+        if (event.pubkey === myPubkey) return;
+        const [botIgnore, tooNew] = await Promise.all([
+          shouldIgnoreDueToBot(event),
+          isAccountTooNew(event.pubkey)
+        ]);
+        if (botIgnore || tooNew) {
+          console.log(`[filtered] ${event.id.slice(0, 12)} pubkey=${event.pubkey.slice(0, 12)} botIgnore=${botIgnore} tooNew=${tooNew}`);
+          return;
+        }
+        await notifyDiscordReply(event, webhookUrl);
       }
     });
 
@@ -229,10 +289,19 @@ if (hookMode) {
 
   const events = await nostr_read(RELAYS, [filter]);
 
-  // Filter out replied events
-  const filteredEvents = events.filter(e => !repliedIds.has(e.id));
+  // Filter out replied events and self-events
+  const filteredEvents = events.filter(e => !repliedIds.has(e.id) && e.pubkey !== myPubkey);
 
   for (const event of filteredEvents.slice(0, 10)) {
+    const [botIgnore, tooNew] = await Promise.all([
+      shouldIgnoreDueToBot(event),
+      isAccountTooNew(event.pubkey)
+    ]);
+    if (botIgnore || tooNew) {
+      console.log(`[filtered] ${event.id.slice(0, 12)}... (botIgnore=${botIgnore}, tooNew=${tooNew})`);
+      continue;
+    }
+
     const date = new Date(event.created_at * 1000).toISOString();
     const shortId = event.id.slice(0, 12);
     const content = event.content.replace(/\n/g, ' ').slice(0, 1000);
