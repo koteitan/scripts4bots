@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { nostr_read, getPriv, privToPub, encodeNpub } from './lib.mjs';
+import { nostr_read, getPriv, privToPub, encodeNpub, toHex } from './lib.mjs';
 import fs from 'fs';
 
 // Show help before loading keys
@@ -14,27 +14,28 @@ Options:
   --check-hist <file>  Path to reply history file (for deduplication & auto-since)
   --since <timestamp>  Only fetch events after this Unix timestamp
   --no-thread          Disable thread context display
+  --npub <npub>        Check replies for this npub (read-only, no NOSTR_NSEC needed)
   -h, --help           Show this help message
 
 Environment variables:
-  NOSTR_NSEC    Your Nostr private key (hex or nsec)
+  NOSTR_NSEC    Your Nostr private key (hex or nsec) — not required with --npub
   NOSTR_RELAYS  Comma-separated list of relay URLs
 
 Examples:
   node check-replies.mjs --check-hist ~/.openclaw/memory/nostr-replied.txt
   node check-replies.mjs --since 1700000000 --no-thread
+  node check-replies.mjs --npub npub1xxx... --since 1700000000
 `);
   process.exit(0);
 }
 
 const RELAYS = process.env.NOSTR_RELAYS?.split(',') || [];
-const privHex = getPriv();
-const myPubkey = privToPub(privHex);
 
 // Parse remaining arguments
 let checkHistFile = null;
 let sinceTimestamp = null;
 let noThread = false;
+let npubOpt = null;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--check-hist' && i + 1 < args.length) {
@@ -45,7 +46,19 @@ for (let i = 0; i < args.length; i++) {
     i++;
   } else if (args[i] === '--no-thread') {
     noThread = true;
+  } else if (args[i] === '--npub' && i + 1 < args.length) {
+    npubOpt = args[i + 1];
+    i++;
   }
+}
+
+// Resolve pubkey: --npub takes priority, otherwise use NOSTR_NSEC
+let myPubkey;
+if (npubOpt) {
+  myPubkey = toHex(npubOpt);
+} else {
+  const privHex = getPriv();
+  myPubkey = privToPub(privHex);
 }
 
 // Read hist-file if provided
@@ -143,8 +156,8 @@ for (const event of filteredEvents.slice(0, 10)) {
   }
 }
 
-// Update hist-file with current timestamp
-if (checkHistFile) {
+// Update hist-file with current timestamp (skipped in read-only --npub mode)
+if (checkHistFile && !npubOpt) {
   const now = Math.floor(Date.now() / 1000);
   let lines;
 
