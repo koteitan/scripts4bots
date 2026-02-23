@@ -53,7 +53,7 @@ const filteredEvents = events.filter(e => !repliedIds.has(e.id));
 for (const event of filteredEvents.slice(0, 10)) {
   const date = new Date(event.created_at * 1000).toISOString();
   const shortId = event.id.slice(0, 12);
-  const content = event.content.replace(/\n/g, ' ').slice(0, 100);
+  const content = event.content.replace(/\n/g, ' ').slice(0, 1000);
   console.log(`[${date}] ${shortId}… ${content}`);
 }
 

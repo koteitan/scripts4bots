@@ -45,7 +45,7 @@ if (json) {
     const t = new Date(e.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
     const npub = encodeNpub(e.pubkey).slice(0, 16) + '…';
     console.log(`[${t}] ${npub}`);
-    console.log(e.content.slice(0, 300));
+    console.log(e.content.slice(0, 1000));
     console.log('---');
   }
 }
