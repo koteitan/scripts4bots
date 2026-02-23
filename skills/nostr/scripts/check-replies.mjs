@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { nostr_read, getPriv, privToPub, encodeNpub, toHex } from './lib.mjs';
+import WebSocket from 'ws';
 import fs from 'fs';
 
 // Show help before loading keys
@@ -15,16 +16,19 @@ Options:
   --since <timestamp>  Only fetch events after this Unix timestamp
   --no-thread          Disable thread context display
   --npub <npub>        Check replies for this npub (read-only, no NOSTR_NSEC needed)
+  --hook               Stay alive and notify Discord via webhook on new replies
   -h, --help           Show this help message
 
 Environment variables:
-  NOSTR_NSEC    Your Nostr private key (hex or nsec) — not required with --npub
-  NOSTR_RELAYS  Comma-separated list of relay URLs
+  NOSTR_NSEC                   Your Nostr private key (hex or nsec) — not required with --npub
+  NOSTR_RELAYS                 Comma-separated list of relay URLs
+  DISCORD_HOOK_FOR_NOSTR_REPLY Discord Webhook URL (required with --hook)
 
 Examples:
   node check-replies.mjs --check-hist ~/.openclaw/memory/nostr-replied.txt
   node check-replies.mjs --since 1700000000 --no-thread
   node check-replies.mjs --npub npub1xxx... --since 1700000000
+  node check-replies.mjs --hook
 `);
   process.exit(0);
 }
@@ -36,6 +40,7 @@ let checkHistFile = null;
 let sinceTimestamp = null;
 let noThread = false;
 let npubOpt = null;
+let hookMode = false;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--check-hist' && i + 1 < args.length) {
@@ -49,6 +54,8 @@ for (let i = 0; i < args.length; i++) {
   } else if (args[i] === '--npub' && i + 1 < args.length) {
     npubOpt = args[i + 1];
     i++;
+  } else if (args[i] === '--hook') {
+    hookMode = true;
   }
 }
 
@@ -60,35 +67,6 @@ if (npubOpt) {
   const privHex = getPriv();
   myPubkey = privToPub(privHex);
 }
-
-// Read hist-file if provided
-let repliedIds = new Set();
-if (checkHistFile) {
-  if (fs.existsSync(checkHistFile)) {
-    const lines = fs.readFileSync(checkHistFile, 'utf-8').split('\n');
-    for (const line of lines) {
-      if (line.startsWith('# Last check:')) {
-        const timestamp = parseInt(line.split(':')[1].trim());
-        if (!isNaN(timestamp) && !sinceTimestamp) {
-          sinceTimestamp = timestamp;
-        }
-      } else if (line && !line.startsWith('#')) {
-        repliedIds.add(line.trim());
-      }
-    }
-  }
-}
-
-// Build filter
-const filter = { kinds: [1], '#p': [myPubkey], limit: 50 };
-if (sinceTimestamp) {
-  filter.since = sinceTimestamp;
-}
-
-const events = await nostr_read(RELAYS, [filter]);
-
-// Filter out replied events
-const filteredEvents = events.filter(e => !repliedIds.has(e.id));
 
 // Helper: get root event ID from e tags (NIP-10)
 function getRootId(event) {
@@ -129,18 +107,19 @@ async function fetchThread(rootId, currentEventId) {
   }
 }
 
-for (const event of filteredEvents.slice(0, 10)) {
+// Build and send Discord notification for a reply event
+async function notifyDiscordReply(event, webhookUrl) {
   const date = new Date(event.created_at * 1000).toISOString();
   const shortId = event.id.slice(0, 12);
-  const content = event.content.replace(/\n/g, ' ').slice(0, 1000);
-  console.log(`[${date}] ${shortId}… ${content}`);
+  const content = event.content.slice(0, 1000);
+  let text = `🔔 **Nostr リプライ**\n\n[${date}] ${shortId}...\n${content}`;
 
   if (!noThread) {
     const rootId = getRootId(event);
     if (rootId) {
       const threadEvents = await fetchThread(rootId, event.id);
       if (threadEvents && threadEvents.length > 0) {
-        console.log(`\n  🧵 スレッド:`);
+        text += '\n\n🧵 スレッド:';
         for (const te of threadEvents) {
           const teDate = new Date(te.created_at * 1000).toISOString().replace('T', ' ').slice(0, 16);
           const teNpub = encodeNpub(te.pubkey).slice(0, 16) + '…';
@@ -148,63 +127,188 @@ for (const event of filteredEvents.slice(0, 10)) {
           const isCurrentEvent = te.id === event.id;
           const prefix = isCurrentEvent ? '  └→' : '    ';
           const suffix = isCurrentEvent ? ' ← 今回のリプライ' : '';
-          console.log(`${prefix} [${teDate}] ${teNpub}: ${teContent}${suffix}`);
+          text += `\n${prefix} [${teDate}] ${teNpub}: ${teContent}${suffix}`;
         }
-        console.log('');
       }
     }
+  }
+
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text.slice(0, 2000), username: 'すしめいじ 🪄' })
+    });
+    console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);
+  } catch (e) {
+    console.error(`  Discord notification failed: ${e.message}`);
   }
 }
 
-// Update hist-file with current timestamp (skipped in read-only --npub mode)
-if (checkHistFile && !npubOpt) {
-  const now = Math.floor(Date.now() / 1000);
-  let lines;
+// Hook mode: stay alive and notify Discord on new replies
+async function startHookMode(relays, pubkey, webhookUrl) {
+  console.error(`🪝 Hook mode started. Listening for replies on ${relays.length} relay(s)...`);
 
-  if (fs.existsSync(checkHistFile)) {
-    // Existing hist-file
-    lines = fs.readFileSync(checkHistFile, 'utf-8').split('\n');
-  } else {
-    // First-time creation: fetch past replies to populate replied IDs
-    console.error('🔍 First run: fetching past replies to initialize hist-file...');
-    const myPosts = await nostr_read(RELAYS, [{
-      kinds: [1],
-      authors: [myPubkey],
-      limit: 100
-    }]);
+  function connectRelay(url) {
+    let ws;
+    try { ws = new WebSocket(url); } catch (e) {
+      console.error(`  Failed to connect: ${url}. Retrying in 5s...`);
+      setTimeout(() => connectRelay(url), 5000);
+      return;
+    }
+    const subId = 'hook-' + Math.random().toString(36).slice(2, 8);
+    let eoseSeen = false;
+    let reconnecting = false;
 
-    // Extract all e tags (replied-to event IDs)
-    const pastRepliedIds = new Set();
-    for (const post of myPosts) {
-      for (const tag of post.tags) {
-        if (tag[0] === 'e' && tag[1]) {
-          pastRepliedIds.add(tag[1]);
+    function scheduleReconnect() {
+      if (reconnecting) return;
+      reconnecting = true;
+      console.error(`  Reconnecting ${url} in 5s...`);
+      setTimeout(() => connectRelay(url), 5000);
+    }
+
+    ws.on('open', () => {
+      const filter = { kinds: [1], '#p': [pubkey], since: Math.floor(Date.now() / 1000) };
+      ws.send(JSON.stringify(['REQ', subId, filter]));
+      console.error(`  Connected: ${url}`);
+    });
+
+    ws.on('message', async (raw) => {
+      let msg;
+      try { msg = JSON.parse(raw.toString()); } catch { return; }
+      if (msg[0] === 'EOSE' && msg[1] === subId) {
+        eoseSeen = true;
+      } else if (msg[0] === 'EVENT' && msg[1] === subId && eoseSeen) {
+        await notifyDiscordReply(msg[2], webhookUrl);
+      }
+    });
+
+    ws.on('close', scheduleReconnect);
+    ws.on('error', scheduleReconnect);
+  }
+
+  for (const url of relays) {
+    connectRelay(url);
+  }
+
+  // Keep process alive indefinitely
+  await new Promise(() => {});
+}
+
+if (hookMode) {
+  const webhookUrl = process.env.DISCORD_HOOK_FOR_NOSTR_REPLY;
+  if (!webhookUrl) {
+    console.error('Error: DISCORD_HOOK_FOR_NOSTR_REPLY not set.');
+    process.exit(1);
+  }
+  await startHookMode(RELAYS, myPubkey, webhookUrl);
+} else {
+  // Read hist-file if provided
+  let repliedIds = new Set();
+  if (checkHistFile) {
+    if (fs.existsSync(checkHistFile)) {
+      const lines = fs.readFileSync(checkHistFile, 'utf-8').split('\n');
+      for (const line of lines) {
+        if (line.startsWith('# Last check:')) {
+          const timestamp = parseInt(line.split(':')[1].trim());
+          if (!isNaN(timestamp) && !sinceTimestamp) {
+            sinceTimestamp = timestamp;
+          }
+        } else if (line && !line.startsWith('#')) {
+          repliedIds.add(line.trim());
         }
       }
     }
+  }
 
-    console.error(`📝 Found ${pastRepliedIds.size} past replied event IDs`);
+  // Build filter
+  const filter = { kinds: [1], '#p': [myPubkey], limit: 50 };
+  if (sinceTimestamp) {
+    filter.since = sinceTimestamp;
+  }
 
-    // Initialize lines with header and past replied IDs
-    lines = ['# replied IDs:', ''];
-    for (const id of pastRepliedIds) {
-      lines.push(id);
+  const events = await nostr_read(RELAYS, [filter]);
+
+  // Filter out replied events
+  const filteredEvents = events.filter(e => !repliedIds.has(e.id));
+
+  for (const event of filteredEvents.slice(0, 10)) {
+    const date = new Date(event.created_at * 1000).toISOString();
+    const shortId = event.id.slice(0, 12);
+    const content = event.content.replace(/\n/g, ' ').slice(0, 1000);
+    console.log(`[${date}] ${shortId}… ${content}`);
+
+    if (!noThread) {
+      const rootId = getRootId(event);
+      if (rootId) {
+        const threadEvents = await fetchThread(rootId, event.id);
+        if (threadEvents && threadEvents.length > 0) {
+          console.log(`\n  🧵 スレッド:`);
+          for (const te of threadEvents) {
+            const teDate = new Date(te.created_at * 1000).toISOString().replace('T', ' ').slice(0, 16);
+            const teNpub = encodeNpub(te.pubkey).slice(0, 16) + '…';
+            const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
+            const isCurrentEvent = te.id === event.id;
+            const prefix = isCurrentEvent ? '  └→' : '    ';
+            const suffix = isCurrentEvent ? ' ← 今回のリプライ' : '';
+            console.log(`${prefix} [${teDate}] ${teNpub}: ${teContent}${suffix}`);
+          }
+          console.log('');
+        }
+      }
     }
   }
 
-  // Update or add "Last check" line
-  let updated = false;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('# Last check:')) {
-      lines[i] = `# Last check: ${now}`;
-      updated = true;
-      break;
+  // Update hist-file with current timestamp (skipped in read-only --npub mode)
+  if (checkHistFile && !npubOpt) {
+    const now = Math.floor(Date.now() / 1000);
+    let lines;
+
+    if (fs.existsSync(checkHistFile)) {
+      // Existing hist-file
+      lines = fs.readFileSync(checkHistFile, 'utf-8').split('\n');
+    } else {
+      // First-time creation: fetch past replies to populate replied IDs
+      console.error('🔍 First run: fetching past replies to initialize hist-file...');
+      const myPosts = await nostr_read(RELAYS, [{
+        kinds: [1],
+        authors: [myPubkey],
+        limit: 100
+      }]);
+
+      // Extract all e tags (replied-to event IDs)
+      const pastRepliedIds = new Set();
+      for (const post of myPosts) {
+        for (const tag of post.tags) {
+          if (tag[0] === 'e' && tag[1]) {
+            pastRepliedIds.add(tag[1]);
+          }
+        }
+      }
+
+      console.error(`📝 Found ${pastRepliedIds.size} past replied event IDs`);
+
+      // Initialize lines with header and past replied IDs
+      lines = ['# replied IDs:', ''];
+      for (const id of pastRepliedIds) {
+        lines.push(id);
+      }
     }
-  }
 
-  if (!updated) {
-    lines.unshift(`# Last check: ${now}`);
-  }
+    // Update or add "Last check" line
+    let updated = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('# Last check:')) {
+        lines[i] = `# Last check: ${now}`;
+        updated = true;
+        break;
+      }
+    }
 
-  fs.writeFileSync(checkHistFile, lines.join('\n'));
+    if (!updated) {
+      lines.unshift(`# Last check: ${now}`);
+    }
+
+    fs.writeFileSync(checkHistFile, lines.join('\n'));
+  }
 }
