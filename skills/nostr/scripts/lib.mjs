@@ -8,19 +8,21 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 // ── .env auto-loader ─────────────────────────────────────────
-// Priority: --nsec/--relay args > env vars > .env file
+// Priority: --nsec/--relay args > .env file > env vars
 {
   // 1. Check --nsec and --relay in command line args (highest priority)
+  const _cliSet = new Set();
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--nsec' && i + 1 < argv.length) {
-      process.env.NOSTR_NSEC = argv[i + 1]; i++;
+      process.env.NOSTR_NSEC = argv[i + 1]; _cliSet.add('NOSTR_NSEC'); i++;
     } else if (argv[i] === '--relay' && i + 1 < argv.length) {
-      process.env.NOSTR_RELAYS = argv[i + 1]; i++;
+      process.env.NOSTR_RELAYS = argv[i + 1]; _cliSet.add('NOSTR_RELAYS'); i++;
     }
   }
 
   // 2. Load .env from workspace root (3 levels up: scripts/ → nostr/ → skills/ → workspace/)
+  //    .env takes priority over shell env vars (but not CLI args)
   const _scriptsDir = dirname(fileURLToPath(import.meta.url));
   const _workspaceRoot = resolve(_scriptsDir, '../../..');
   const _envPath = resolve(_workspaceRoot, '.env');
@@ -32,7 +34,7 @@ import fs from 'fs';
       if (eqIdx === -1) continue;
       const key = trimmed.slice(0, eqIdx).trim();
       const value = trimmed.slice(eqIdx + 1).trim();
-      if (key && !process.env[key]) process.env[key] = value;
+      if (key && !_cliSet.has(key)) process.env[key] = value;
     }
   }
 
