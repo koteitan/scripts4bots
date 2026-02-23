@@ -43,9 +43,8 @@ if (hookMode) {
     process.exit(1);
   }
 
-  // Auto-set since to now in hook mode
-  const hookSince = Math.floor(Date.now() / 1000) - 60;
   console.error(`🪝 Hook mode started. Searching for "${query}" on ${relay}...`);
+  const seenIds = new Set();
 
   function connectSearch() {
     let ws;
@@ -55,7 +54,6 @@ if (hookMode) {
       return;
     }
     const subId = 'search-' + Math.random().toString(36).slice(2, 8);
-    let eoseSeen = false;
     let reconnecting = false;
 
     function scheduleReconnect() {
@@ -66,7 +64,7 @@ if (hookMode) {
     }
 
     ws.on('open', () => {
-      const filter = { kinds: [1], search: query, since: hookSince, limit: 100 };
+      const filter = { kinds: [1], search: query, limit: 0 };
       if (pubkey) filter.authors = [pubkey];
       ws.send(JSON.stringify(['REQ', subId, filter]));
       console.error(`  Connected: ${relay}`);
@@ -76,9 +74,11 @@ if (hookMode) {
       let msg;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
       if (msg[0] === 'EOSE' && msg[1] === subId) {
-        eoseSeen = true;
-      } else if (msg[0] === 'EVENT' && msg[1] === subId && eoseSeen) {
+        // noop
+      } else if (msg[0] === 'EVENT' && msg[1] === subId) {
         const event = msg[2];
+        if (seenIds.has(event.id)) return;
+        seenIds.add(event.id);
         const t = new Date(event.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
         const npub = encodeNpub(event.pubkey).slice(0, 16) + '…';
         const content = event.content.slice(0, 1000);
