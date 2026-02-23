@@ -184,12 +184,13 @@ async function notifyDiscordReply(event, webhookUrl) {
   }
 
   try {
-    await fetch(webhookUrl, {
+    const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: text.slice(0, 2000), username: 'すしめいじ 🪄' })
     });
-    console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);
+    console.error(`  Notified Discord: ${event.id.slice(0, 12)}... (HTTP ${res.status})`);
+    if (!res.ok) console.error(`  Response: ${await res.text()}`);
   } catch (e) {
     console.error(`  Discord notification failed: ${e.message}`);
   }
