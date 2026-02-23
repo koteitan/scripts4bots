@@ -2,15 +2,7 @@
 import { nostr_read, getPriv, privToPub, encodeNpub } from './lib.mjs';
 import fs from 'fs';
 
-const RELAYS = process.env.NOSTR_RELAYS?.split(',') || [];
-const privHex = getPriv();
-const myPubkey = privToPub(privHex);
-
-// Parse command line arguments
-let checkHistFile = null;
-let sinceTimestamp = null;
-let noThread = false;
-
+// Show help before loading keys
 const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
@@ -34,6 +26,15 @@ Examples:
 `);
   process.exit(0);
 }
+
+const RELAYS = process.env.NOSTR_RELAYS?.split(',') || [];
+const privHex = getPriv();
+const myPubkey = privToPub(privHex);
+
+// Parse remaining arguments
+let checkHistFile = null;
+let sinceTimestamp = null;
+let noThread = false;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--check-hist' && i + 1 < args.length) {
