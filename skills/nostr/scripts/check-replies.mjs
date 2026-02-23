@@ -78,7 +78,7 @@ const ignorePubkeys = new Set(
   [ignorePubkeysArg, process.env.NOSTR_HOOK_IGNORE_PUBKEYS || '']
     .join(',')
     .split(',')
-    .map(s => s.trim())
+    .map(s => s.split(/\s+#/)[0].trim())
     .filter(Boolean)
     .map(s => { try { return toHex(s); } catch { return s; } })
 );
