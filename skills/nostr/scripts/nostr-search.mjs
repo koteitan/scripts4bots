@@ -44,7 +44,7 @@ if (hookMode) {
   }
 
   // Auto-set since to now in hook mode
-  const hookSince = Math.floor(Date.now() / 1000);
+  const hookSince = Math.floor(Date.now() / 1000) - 60;
   console.error(`🪝 Hook mode started. Searching for "${query}" on ${relay}...`);
 
   function connectSearch() {

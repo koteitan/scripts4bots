@@ -218,7 +218,7 @@ async function startHookMode(relays, pubkey, webhookUrl) {
     }
 
     ws.on('open', () => {
-      const filter = { kinds: [1], '#p': [pubkey], since: Math.floor(Date.now() / 1000) };
+      const filter = { kinds: [1], '#p': [pubkey], since: Math.floor(Date.now() / 1000) - 60 };
       ws.send(JSON.stringify(['REQ', subId, filter]));
       console.error(`  Connected: ${url}`);
     });
@@ -228,7 +228,9 @@ async function startHookMode(relays, pubkey, webhookUrl) {
       try { msg = JSON.parse(raw.toString()); } catch { return; }
       if (msg[0] === 'EOSE' && msg[1] === subId) {
         eoseSeen = true;
-      } else if (msg[0] === 'EVENT' && msg[1] === subId && eoseSeen) {
+        console.error(`  EOSE received: ${url}`);
+      } else if (msg[0] === 'EVENT' && msg[1] === subId) {
+        if (!eoseSeen) return;
         const event = msg[2];
         if (event.pubkey === myPubkey) return;
         const [botIgnore, tooNew] = await Promise.all([
