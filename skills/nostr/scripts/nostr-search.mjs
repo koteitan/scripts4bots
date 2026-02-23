@@ -45,6 +45,7 @@ if (hookMode) {
 
   console.error(`🪝 Hook mode started. Searching for "${query}" on ${relay}...`);
   const seenIds = new Set();
+  const hookSince = Math.floor(Date.now() / 1000);
 
   function connectSearch() {
     let ws;
@@ -64,7 +65,7 @@ if (hookMode) {
     }
 
     ws.on('open', () => {
-      const filter = { kinds: [1], search: query, since: Math.floor(Date.now() / 1000) };
+      const filter = { kinds: [1], search: query, since: hookSince };
       if (pubkey) filter.authors = [pubkey];
       ws.send(JSON.stringify(['REQ', subId, filter]));
       console.error(`  Connected: ${relay}`);

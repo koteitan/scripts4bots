@@ -200,6 +200,7 @@ async function notifyDiscordReply(event, webhookUrl) {
 async function startHookMode(relays, pubkey, webhookUrl) {
   console.error(`🪝 Hook mode started. Listening for replies on ${relays.length} relay(s)...`);
   const seenIds = new Set();
+  const hookSince = Math.floor(Date.now() / 1000);
 
   function connectRelay(url) {
     let ws;
@@ -219,7 +220,7 @@ async function startHookMode(relays, pubkey, webhookUrl) {
     }
 
     ws.on('open', () => {
-      const filter = { kinds: [1], '#p': [pubkey], since: Math.floor(Date.now() / 1000) };
+      const filter = { kinds: [1], '#p': [pubkey], since: hookSince };
       ws.send(JSON.stringify(['REQ', subId, filter]));
       console.error(`  Connected: ${url}`);
     });
