@@ -230,17 +230,20 @@ async function startHookMode(relays, pubkey, webhookUrl) {
         console.error(`  EOSE received: ${url}`);
       } else if (msg[0] === 'EVENT' && msg[1] === subId) {
         const event = msg[2];
-        if (seenIds.has(event.id)) return;
+        if (seenIds.has(event.id)) { console.error(`  [dup] ${event.id.slice(0,12)}`); return; }
         seenIds.add(event.id);
+        console.error(`  [event] id=${event.id.slice(0,12)} pubkey=${event.pubkey.slice(0,12)} self=${event.pubkey === myPubkey}`);
         if (event.pubkey === myPubkey) return;
         const [botIgnore, tooNew] = await Promise.all([
           shouldIgnoreDueToBot(event),
           isAccountTooNew(event.pubkey)
         ]);
+        console.error(`  [filter] botIgnore=${botIgnore} tooNew=${tooNew}`);
         if (botIgnore || tooNew) {
-          console.log(`[filtered] ${event.id.slice(0, 12)} pubkey=${event.pubkey.slice(0, 12)} botIgnore=${botIgnore} tooNew=${tooNew}`);
+          console.error(`  [filtered] ${event.id.slice(0, 12)} pubkey=${event.pubkey.slice(0, 12)}`);
           return;
         }
+        console.error(`  [notify] ${event.id.slice(0,12)}`);
         await notifyDiscordReply(event, webhookUrl);
       }
     });
