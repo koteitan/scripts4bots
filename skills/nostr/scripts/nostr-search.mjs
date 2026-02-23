@@ -45,7 +45,7 @@ if (hookMode) {
 
   console.error(`🪝 Hook mode started. Searching for "${query}" on ${relay}...`);
   const seenIds = new Set();
-  const hookSince = Math.floor(Date.now() / 1000);
+  const hookSince = Math.floor(Date.now() / 1000) - 30;
 
   function connectSearch() {
     let ws;

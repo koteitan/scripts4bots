@@ -200,7 +200,7 @@ async function notifyDiscordReply(event, webhookUrl) {
 async function startHookMode(relays, pubkey, webhookUrl) {
   console.error(`🪝 Hook mode started. Listening for replies on ${relays.length} relay(s)...`);
   const seenIds = new Set();
-  const hookSince = Math.floor(Date.now() / 1000);
+  const hookSince = Math.floor(Date.now() / 1000) - 30;
 
   function connectRelay(url) {
     let ws;
