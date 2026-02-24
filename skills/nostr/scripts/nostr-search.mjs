@@ -72,28 +72,32 @@ if (hookMode) {
     });
 
     ws.on('message', async (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
-      if (msg[0] === 'EOSE' && msg[1] === subId) {
-        // noop
-      } else if (msg[0] === 'EVENT' && msg[1] === subId) {
-        const event = msg[2];
-        if (seenIds.has(event.id)) return;
-        seenIds.add(event.id);
-        const t = new Date(event.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
-        const npub = encodeNpub(event.pubkey).slice(0, 16) + '…';
-        const content = event.content.slice(0, 1000);
-        const text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}] ${npub}\n${content}`;
-        try {
-          await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: text.slice(0, 2000), username: 'すしめいじ 🪄' })
-          });
-          console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);
-        } catch (e) {
-          console.error(`  Discord notification failed: ${e.message}`);
+      try {
+        let msg;
+        try { msg = JSON.parse(raw.toString()); } catch { return; }
+        if (msg[0] === 'EOSE' && msg[1] === subId) {
+          // noop
+        } else if (msg[0] === 'EVENT' && msg[1] === subId) {
+          const event = msg[2];
+          if (seenIds.has(event.id)) return;
+          seenIds.add(event.id);
+          const t = new Date(event.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
+          const npub = encodeNpub(event.pubkey).slice(0, 16) + '…';
+          const content = event.content.slice(0, 1000);
+          const text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}] ${npub}\n${content}`;
+          try {
+            await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: text.slice(0, 2000), username: 'すしめいじ 🪄' })
+            });
+            console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);
+          } catch (e) {
+            console.error(`  Discord notification failed: ${e.message}`);
+          }
         }
+      } catch (e) {
+        console.error(`  [error] message handler exception: ${e.message}`);
       }
     });
 
