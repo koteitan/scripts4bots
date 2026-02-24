@@ -134,12 +134,12 @@ async function fetchThread(rootId, currentEventId) {
 // Filter: skip if thread contains a known bot and current event's thread index >= 5
 async function shouldIgnoreDueToBot(event) {
   if (ignorePubkeys.size === 0) return false;
+  // 送信者自身がbot/ignoredリストにいるかどうかだけ見る
+  if (!ignorePubkeys.has(event.pubkey)) return false;
   const rootId = getRootId(event);
-  if (!rootId) return false;
+  if (!rootId) return true;
   const threadEvents = await fetchThread(rootId, event.id);
-  if (!threadEvents) return false;
-  const hasBot = threadEvents.some(e => ignorePubkeys.has(e.pubkey));
-  if (!hasBot) return false;
+  if (!threadEvents) return true;
   const idx = threadEvents.findIndex(e => e.id === event.id);
   return idx >= 5;
 }
