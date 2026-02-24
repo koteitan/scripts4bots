@@ -136,10 +136,11 @@ async function shouldIgnoreDueToBot(event) {
   if (ignorePubkeys.size === 0) return false;
   // 送信者自身がbot/ignoredリストにいるかどうかだけ見る
   if (!ignorePubkeys.has(event.pubkey)) return false;
+  // eタグなし = スレッド深さ0、スパムではないので通知する
   const rootId = getRootId(event);
-  if (!rootId) return true;
+  if (!rootId) return false;
   const threadEvents = await fetchThread(rootId, event.id);
-  if (!threadEvents) return true;
+  if (!threadEvents) return false;
   const idx = threadEvents.findIndex(e => e.id === event.id);
   return idx >= 5;
 }
