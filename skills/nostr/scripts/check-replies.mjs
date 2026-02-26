@@ -150,9 +150,10 @@ async function isAccountTooNew(pubkeyHex) {
   const FIVE_DAYS = 5 * 24 * 60 * 60;
   const now = Math.floor(Date.now() / 1000);
   try {
-    const profileEvents = await nostr_read(RELAYS, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }]);
+    const profileEvents = await nostr_read(RELAYS, [{ kinds: [0], authors: [pubkeyHex], limit: 10 }]);
     if (profileEvents.length === 0) return true; // kind:0なし = 新規扱い
-    return (now - profileEvents[0].created_at) < FIVE_DAYS;
+    const oldest = Math.min(...profileEvents.map(e => e.created_at));
+    return (now - oldest) < FIVE_DAYS;
   } catch {
     return false; // エラー時は通知する（false-negative側に倒す）
   }
