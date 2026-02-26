@@ -21,6 +21,17 @@ let checkHistFile = null;
 let forceReply = false;
 
 const args = process.argv.slice(2);
+if (args.includes('--help') || args.includes('-h')) {
+  console.log('Usage: nostr-post [--reply <id>] [--quote <id>] [--mention <pk>] [--check-hist <file>] [--force] "text"');
+  console.log('Examples:');
+  console.log('  nostr-post "Hello"');
+  console.log('  nostr-post --reply <event-id> --check-hist <file> "Hello"');
+  console.log('  nostr-post --reply <event-id> --force "Hello"');
+  console.log('  nostr-post --quote <event-id> "Hello"');
+  console.log('  nostr-post --mention <pubkey> "Hello"');
+  process.exit(0);
+}
+
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--reply' && args[i + 1]) { replyTo = toHex(args[++i]); }
   else if (args[i] === '--quote' && args[i + 1]) { quoteId = toHex(args[++i]); }
@@ -34,6 +45,7 @@ let text = textParts.join(' ');
 if (!text && !quoteId) { 
   console.error('Usage: nostr-post [--reply <id>] [--quote <id>] [--mention <pk>] "text"');
   console.error('Reply deduplication: --reply requires --check-hist <file> or --force');
+  console.error('Use --help for full usage.');
   process.exit(1); 
 }
 
