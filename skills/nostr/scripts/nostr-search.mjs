@@ -56,6 +56,9 @@ if (hookMode) {
     }
     const subId = 'search-' + Math.random().toString(36).slice(2, 8);
     let reconnecting = false;
+    let lastEventAt = Date.now();
+    const IDLE_MS = 10 * 60 * 1000; // 10 minutes
+    let idleTimer = null;
 
     function scheduleReconnect() {
       if (reconnecting) return;
@@ -64,10 +67,23 @@ if (hookMode) {
       setTimeout(connectSearch, 5000);
     }
 
+    function startIdleWatch() {
+      if (idleTimer) clearInterval(idleTimer);
+      idleTimer = setInterval(() => {
+        if (Date.now() - lastEventAt > IDLE_MS) {
+          console.error(`  Idle timeout (${IDLE_MS/60000}m). Reconnecting ${relay}...`);
+          try { ws.terminate(); } catch {}
+          scheduleReconnect();
+        }
+      }, 60 * 1000);
+    }
+
     ws.on('open', () => {
       const filter = { kinds: [1], search: query, since: hookSince };
       if (pubkey) filter.authors = [pubkey];
       ws.send(JSON.stringify(['REQ', subId, filter]));
+      lastEventAt = Date.now();
+      startIdleWatch();
       console.error(`  Connected: ${relay}`);
     });
 
@@ -78,6 +94,7 @@ if (hookMode) {
         if (msg[0] === 'EOSE' && msg[1] === subId) {
           // noop
         } else if (msg[0] === 'EVENT' && msg[1] === subId) {
+          lastEventAt = Date.now();
           const event = msg[2];
           if (seenIds.has(event.id)) return;
           seenIds.add(event.id);
@@ -101,8 +118,14 @@ if (hookMode) {
       }
     });
 
-    ws.on('close', scheduleReconnect);
-    ws.on('error', scheduleReconnect);
+    ws.on('close', () => {
+      if (idleTimer) clearInterval(idleTimer);
+      scheduleReconnect();
+    });
+    ws.on('error', () => {
+      if (idleTimer) clearInterval(idleTimer);
+      scheduleReconnect();
+    });
   }
 
   connectSearch();
