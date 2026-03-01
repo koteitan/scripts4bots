@@ -57,7 +57,7 @@ if (hookMode) {
     const subId = 'search-' + Math.random().toString(36).slice(2, 8);
     let reconnecting = false;
     let lastEventAt = Date.now();
-    const IDLE_MS = 10 * 60 * 1000; // 10 minutes
+    const IDLE_MS = 60 * 60 * 1000; // 60 minutes
     let idleTimer = null;
 
     function scheduleReconnect() {
