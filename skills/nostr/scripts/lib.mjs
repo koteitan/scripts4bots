@@ -256,6 +256,19 @@ function logError(relayUrl, errMsg) {
   } catch {}
 }
 
+export function relayLogSend(relayUrl, kind, rawJson) {
+  logSend(relayUrl, kind, rawJson);
+}
+
+export function relayLogError(relayUrl, errMsg) {
+  logError(relayUrl, errMsg);
+}
+
+export function sendWithRelayLog(ws, relayUrl, kind, payload) {
+  relayLogSend(relayUrl, kind, payload);
+  ws.send(payload);
+}
+
 // ── nostr_read ───────────────────────────────────────────────
 /**
  * nostr_read(relays, filters, opts) → Promise<Event[]>
@@ -286,8 +299,7 @@ export function nostr_read(relays, filters, opts = {}) {
 
       ws.on('open', () => {
         const payload = JSON.stringify(['REQ', subId, ...filters]);
-        logSend(url, 'REQ', payload);
-        ws.send(payload);
+        sendWithRelayLog(ws, url, 'REQ', payload);
       });
       ws.on('message', (raw) => {
         let msg; try { msg = JSON.parse(raw.toString()); } catch { return; }
@@ -332,8 +344,7 @@ export function nostr_write(relays, event, opts = {}) {
 
       ws.on('open', () => {
         const payload = JSON.stringify(['EVENT', event]);
-        logSend(url, 'EVENT', payload);
-        ws.send(payload);
+        sendWithRelayLog(ws, url, 'EVENT', payload);
       });
       ws.on('message', (raw) => {
         let msg; try { msg = JSON.parse(raw.toString()); } catch { return; }
