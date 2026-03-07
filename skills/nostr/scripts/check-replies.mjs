@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { nostr_read, getPriv, privToPub, encodeNpub, toHex } from './lib.mjs';
+import { nostr_read, getPriv, privToPub, encodeNpub, toHex, getProfileInfo, formatDisplayLabel } from './lib.mjs';
 import WebSocket from 'ws';
 import fs from 'fs';
 
@@ -161,24 +161,34 @@ async function isAccountTooNew(pubkeyHex) {
 // Build and send Discord notification for a reply event
 async function notifyDiscordReply(event, webhookUrl) {
   const date = new Date(event.created_at * 1000).toISOString();
-  const shortId = event.id.slice(0, 12);
   const content = event.content.slice(0, 1000);
-  let text = `🔔 **Nostr リプライ**\n\n[${date}] \`${event.id}\`\n${content}`;
+  const senderInfo = await getProfileInfo(event.pubkey, RELAYS);
+  const senderLabel = formatDisplayLabel(senderInfo);
+  const senderNpub = encodeNpub(event.pubkey).slice(0, 16) + '…';
+  const senderStr = senderLabel ? `${senderLabel} (${senderNpub})` : senderNpub;
+  let text = `🔔 **Nostr リプライ**\n\n[${date}] \`${event.id}\`\nFrom: ${senderStr}\n${content}`;
 
   if (!noThread) {
     const rootId = getRootId(event);
     if (rootId) {
       const threadEvents = await fetchThread(rootId, event.id);
       if (threadEvents && threadEvents.length > 0) {
+        const threadProfiles = new Map();
+        await Promise.all(threadEvents.map(async te => {
+          threadProfiles.set(te.pubkey, await getProfileInfo(te.pubkey, RELAYS));
+        }));
         text += '\n\n🧵 スレッド:';
         for (const te of threadEvents) {
           const teDate = new Date(te.created_at * 1000).toISOString().replace('T', ' ').slice(0, 16);
+          const teInfo = threadProfiles.get(te.pubkey);
+          const teLabel = formatDisplayLabel(teInfo);
           const teNpub = encodeNpub(te.pubkey).slice(0, 16) + '…';
+          const teAuthor = teLabel ? `${teLabel}(${teNpub})` : teNpub;
           const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
           const isCurrentEvent = te.id === event.id;
           const prefix = isCurrentEvent ? '  └→' : '    ';
           const suffix = isCurrentEvent ? ' ← 今回のリプライ' : '';
-          text += `\n${prefix} [${teDate}] ${teNpub}: ${teContent}${suffix}`;
+          text += `\n${prefix} [${teDate}] ${teAuthor}: ${teContent}${suffix}`;
         }
       }
     }

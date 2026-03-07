@@ -249,6 +249,10 @@ export function nostr_read(relays, filters, opts = {}) {
   });
 }
 
+// ── module-level workspace root ──────────────────────────────
+const _modDir = dirname(fileURLToPath(import.meta.url));
+export const WORKSPACE_ROOT = resolve(_modDir, '../../..');
+
 // ── nostr_write ──────────────────────────────────────────────
 /**
  * nostr_write(relays, event, opts) → Promise<{ ok: string[], fail: string[] }>
@@ -287,4 +291,72 @@ export function nostr_write(relays, event, opts = {}) {
       ws.on('error', () => { fail.push(url); doneCount++; if (doneCount >= total) finish(); });
     }
   });
+}
+
+// ── pubkey metadata helpers ───────────────────────────────────
+let _pubkeyCache = null; // in-memory cache for pubkey.txt
+
+/** Path to pubkey.txt (env override: NOSTR_PUBKEY_FILE) */
+export function getPubkeyFilePath() {
+  return process.env.NOSTR_PUBKEY_FILE || resolve(WORKSPACE_ROOT, 'pubkey.txt');
+}
+
+/** Load and parse pubkey.txt → Map<hex, {display_name, name}> */
+export function loadPubkeyMap() {
+  if (_pubkeyCache !== null) return _pubkeyCache;
+  const map = new Map();
+  const filePath = getPubkeyFilePath();
+  if (fs.existsSync(filePath)) {
+    for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
+      const t = line.trim();
+      if (!t || t.startsWith('#') || t === 'pubkey,display_name,name') continue;
+      const parts = t.split(',');
+      const rawPubkey = (parts[0] || '').trim();
+      if (!rawPubkey) continue;
+      let hex;
+      try { hex = toHex(rawPubkey); } catch { continue; }
+      map.set(hex, { display_name: (parts[1] || '').trim(), name: (parts[2] || '').trim() });
+    }
+  }
+  _pubkeyCache = map;
+  return map;
+}
+
+/** Persist pubkey map to disk */
+export function savePubkeyMap(map) {
+  _pubkeyCache = map;
+  const lines = ['pubkey,display_name,name'];
+  for (const [hex, info] of map) {
+    lines.push(`${hex},${info.display_name || ''},${info.name || ''}`);
+  }
+  try { fs.writeFileSync(getPubkeyFilePath(), lines.join('\n') + '\n'); } catch {}
+}
+
+/** Format display_name(name) label with fallbacks */
+export function formatDisplayLabel(info) {
+  if (!info) return '';
+  const dn = info.display_name || '';
+  const n = info.name || '';
+  if (dn && n) return `${dn}(${n})`;
+  return dn || n;
+}
+
+/** Resolve and cache kind:0 profile for a pubkey. Never throws. */
+export async function getProfileInfo(pubkeyHex, relays) {
+  let hex;
+  try { hex = toHex(pubkeyHex); } catch { return null; }
+  const map = loadPubkeyMap();
+  if (map.has(hex)) return map.get(hex);
+  const info = { display_name: '', name: '' };
+  try {
+    const events = await nostr_read(relays, [{ kinds: [0], authors: [hex], limit: 1 }], { timeoutMs: 5000 });
+    if (events.length > 0) {
+      const c = JSON.parse(events[0].content);
+      info.display_name = ((c.display_name || c.displayName || '') + '').slice(0, 64);
+      info.name = ((c.name || '') + '').slice(0, 64);
+    }
+  } catch {}
+  map.set(hex, info);
+  savePubkeyMap(map);
+  return info;
 }

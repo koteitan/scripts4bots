@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // NIP-50 search — queries search-capable relays
-import { nostr_read, toHex, encodeNpub, encodeNevent } from './lib.mjs';
+import { nostr_read, toHex, encodeNpub, encodeNevent, getProfileInfo, formatDisplayLabel } from './lib.mjs';
 import WebSocket from 'ws';
 
 const DEFAULT_RELAY = 'wss://search.nos.today';
@@ -101,7 +101,11 @@ if (hookMode) {
           const t = new Date(event.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
           const npub = encodeNpub(event.pubkey);
           const content = event.content.slice(0, 1000);
-          const text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}]\nEvent ID: \`${event.id}\`\nPubkey: \`${event.pubkey}\`\nNpub: ${npub}\n${content}`;
+          const profileRelays = process.env.NOSTR_RELAYS?.split(',').map(s => s.trim()).filter(Boolean) || [relay];
+          const authorInfo = await getProfileInfo(event.pubkey, profileRelays);
+          const authorLabel = formatDisplayLabel(authorInfo);
+          const authorStr = authorLabel ? `${authorLabel} (${npub.slice(0, 16)}…)` : npub.slice(0, 16) + '…';
+          const text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}]\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n${content}`;
           try {
             await fetch(webhookUrl, {
               method: 'POST',
