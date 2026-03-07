@@ -22,8 +22,9 @@ Options:
 
 Spam/Loop filters (applied in both hook and normal mode):
   - Self-reply filter:  events from your own pubkey are always skipped
-  - Bot+depth filter:   if a thread contains a known bot pubkey (via --ignore-pubkeys or
-                        NOSTR_HOOK_IGNORE_PUBKEYS) and the event's thread index >= 5, skip
+  - Pubkey filter:      events from known bot pubkeys (via --ignore-pubkeys or
+                        NOSTR_HOOK_IGNORE_PUBKEYS) are always skipped
+  - Depth filter:       if the event's thread index >= 5, skip regardless of sender pubkey
   - Account age filter: accounts with kind:0 created within 5 days are skipped;
                         accounts with no kind:0 are treated as new and skipped
 
@@ -131,12 +132,11 @@ async function fetchThread(rootId, currentEventId) {
   }
 }
 
-// Filter: skip if thread contains a known bot and current event's thread index >= 5
-async function shouldIgnoreDueToBot(event) {
-  if (ignorePubkeys.size === 0) return false;
-  // 送信者自身がbot/ignoredリストにいるかどうかだけ見る
-  if (!ignorePubkeys.has(event.pubkey)) return false;
-  // eタグなし = スレッド深さ0、スパムではないので通知する
+// Filter: skip if sender is in ignore list (any depth), OR if event is in a deep thread (index >= 5)
+async function shouldIgnoreEvent(event) {
+  // Pubkey ignore: skip events from known bots regardless of thread depth
+  if (ignorePubkeys.size > 0 && ignorePubkeys.has(event.pubkey)) return true;
+  // Depth filter: skip events at thread index >= 5 regardless of sender pubkey
   const rootId = getRootId(event);
   if (!rootId) return false;
   const threadEvents = await fetchThread(rootId, event.id);
@@ -238,12 +238,12 @@ async function startHookMode(relays, pubkey, webhookUrl) {
           seenIds.add(event.id);
           console.error(`  [event] id=${event.id.slice(0,12)} pubkey=${event.pubkey.slice(0,12)} self=${event.pubkey === myPubkey}`);
           if (event.pubkey === myPubkey) return;
-          const [botIgnore, tooNew] = await Promise.all([
-            shouldIgnoreDueToBot(event),
+          const [ignoreEvent, tooNew] = await Promise.all([
+            shouldIgnoreEvent(event),
             isAccountTooNew(event.pubkey)
           ]);
-          console.error(`  [filter] botIgnore=${botIgnore} tooNew=${tooNew}`);
-          if (botIgnore || tooNew) {
+          console.error(`  [filter] ignoreEvent=${ignoreEvent} tooNew=${tooNew}`);
+          if (ignoreEvent || tooNew) {
             console.error(`  [filtered] ${event.id.slice(0, 12)} pubkey=${event.pubkey.slice(0, 12)}`);
             return;
           }
@@ -305,12 +305,12 @@ if (hookMode) {
   const filteredEvents = events.filter(e => !repliedIds.has(e.id) && e.pubkey !== myPubkey);
 
   for (const event of filteredEvents.slice(0, 10)) {
-    const [botIgnore, tooNew] = await Promise.all([
-      shouldIgnoreDueToBot(event),
+    const [ignoreEvent, tooNew] = await Promise.all([
+      shouldIgnoreEvent(event),
       isAccountTooNew(event.pubkey)
     ]);
-    if (botIgnore || tooNew) {
-      console.log(`[filtered] ${event.id.slice(0, 12)}... (botIgnore=${botIgnore}, tooNew=${tooNew})`);
+    if (ignoreEvent || tooNew) {
+      console.log(`[filtered] ${event.id.slice(0, 12)}... (ignoreEvent=${ignoreEvent}, tooNew=${tooNew})`);
       continue;
     }
 
