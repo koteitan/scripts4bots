@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // NIP-25 reaction
 // Usage: nostr-react.mjs <nevent/note/hex> [emoji]   (default: +)
+// Aborts with exit code 1 if the signer has already reacted with the same emoji.
 import { getRelays, getPriv, privToPub, nostr_read, nostr_write, signEvent, toHex, encodeNevent } from './lib.mjs';
 
 const args = process.argv.slice(2);
@@ -10,14 +11,27 @@ const targetId = toHex(args[0]);
 const emoji = args[1] || '+';
 const relays = getRelays();
 const priv = getPriv();
+const myPubkey = privToPub(priv);
 
 // fetch target event to get author pubkey
 const evts = await nostr_read(relays, [{ ids: [targetId], limit: 1 }], { timeoutMs: 8000 });
 if (!evts.length) { console.error('Event not found'); process.exit(1); }
 const target = evts[0];
 
+// check for duplicate: existing kind:7 by same author targeting same event with same content
+const existing = await nostr_read(
+  relays,
+  [{ kinds: [7], authors: [myPubkey], '#e': [targetId], limit: 10 }],
+  { timeoutMs: 8000 }
+);
+const duplicate = existing.find(e => e.content === emoji);
+if (duplicate) {
+  console.error(`Already reacted ${emoji} to this event (id: ${duplicate.id.slice(0, 16)}…)`);
+  process.exit(1);
+}
+
 const ev = signEvent({
-  pubkey: privToPub(priv),
+  pubkey: myPubkey,
   kind: 7,
   created_at: Math.floor(Date.now() / 1000),
   tags: [
