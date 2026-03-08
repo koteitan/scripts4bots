@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { nostr_read, getPriv, privToPub, encodeNpub, toHex, getProfileInfo, formatDisplayLabel } from './lib.mjs';
+import { nostr_read, getPriv, privToPub, encodeNpub, toHex, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
 import WebSocket from 'ws';
 import fs from 'fs';
 
@@ -232,7 +232,8 @@ async function startHookMode(relays, pubkey, webhookUrl) {
 
     ws.on('open', () => {
       const filter = { kinds: [1], '#p': [pubkey], since: hookSince };
-      ws.send(JSON.stringify(['REQ', subId, filter]));
+      const payload = JSON.stringify(['REQ', subId, filter]);
+      sendWithRelayLog(ws, url, 'REQ', payload);
       console.error(`  Connected: ${url}`);
     });
 
@@ -266,7 +267,10 @@ async function startHookMode(relays, pubkey, webhookUrl) {
     });
 
     ws.on('close', scheduleReconnect);
-    ws.on('error', scheduleReconnect);
+    ws.on('error', (err) => {
+      relayLogError(url, err?.message || String(err));
+      scheduleReconnect();
+    });
   }
 
   for (const url of relays) {

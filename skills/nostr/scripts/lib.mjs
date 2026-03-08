@@ -205,6 +205,70 @@ export function getPriv() {
   return nsecToHex(nsec);
 }
 
+// ── logging helpers ─────────────────────────────────────────
+const LOG_DIR = (process.env.HOME || '~') + '/nostr-logs';
+let _logReady = false;
+
+function ensureLogDir() {
+  if (_logReady) return;
+  try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch {}
+  _logReady = true;
+}
+
+function sanitizeRelayName(relayUrl) {
+  let name = relayUrl;
+  try {
+    const u = new URL(relayUrl);
+    name = (u.host + u.pathname).replace(/\/+$/g, '');
+  } catch {}
+  name = name.replace(/^wss?:\/\//i, '');
+  name = name.replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '');
+  return name || 'unknown';
+}
+
+function syslogTimestamp(d = new Date()) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const mon = months[d.getMonth()];
+  const day = String(d.getDate()).padStart(2, ' ');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${mon} ${day} ${hh}:${mm}:${ss}`;
+}
+
+function logSend(relayUrl, kind, rawJson) {
+  try {
+    ensureLogDir();
+    const name = sanitizeRelayName(relayUrl);
+    const host = process.env.HOSTNAME || 'localhost';
+    const line = `${syslogTimestamp()} ${host} nostr[${process.pid}]: SENT ${kind} ${rawJson}\n`;
+    fs.appendFile(`${LOG_DIR}/${name}.log`, line, () => {});
+  } catch {}
+}
+
+function logError(relayUrl, errMsg) {
+  try {
+    ensureLogDir();
+    const name = sanitizeRelayName(relayUrl);
+    const host = process.env.HOSTNAME || 'localhost';
+    const line = `${syslogTimestamp()} ${host} nostr[${process.pid}]: ERROR ${errMsg}\n`;
+    fs.appendFile(`${LOG_DIR}/${name}.log`, line, () => {});
+  } catch {}
+}
+
+export function relayLogSend(relayUrl, kind, rawJson) {
+  logSend(relayUrl, kind, rawJson);
+}
+
+export function relayLogError(relayUrl, errMsg) {
+  logError(relayUrl, errMsg);
+}
+
+export function sendWithRelayLog(ws, relayUrl, kind, payload) {
+  relayLogSend(relayUrl, kind, payload);
+  ws.send(payload);
+}
+
 // ── nostr_read ───────────────────────────────────────────────
 /**
  * nostr_read(relays, filters, opts) → Promise<Event[]>
@@ -233,7 +297,10 @@ export function nostr_read(relays, filters, opts = {}) {
       try { ws = new WebSocket(url); } catch { eoseCount++; if (eoseCount >= total) finish(); continue; }
       sockets.push(ws);
 
-      ws.on('open', () => ws.send(JSON.stringify(['REQ', subId, ...filters])));
+      ws.on('open', () => {
+        const payload = JSON.stringify(['REQ', subId, ...filters]);
+        sendWithRelayLog(ws, url, 'REQ', payload);
+      });
       ws.on('message', (raw) => {
         let msg; try { msg = JSON.parse(raw.toString()); } catch { return; }
         if (msg[0] === 'EVENT' && msg[1] === subId) {
@@ -244,7 +311,7 @@ export function nostr_read(relays, filters, opts = {}) {
           if (eoseCount >= total) finish();
         }
       });
-      ws.on('error', () => { eoseCount++; if (eoseCount >= total) finish(); });
+      ws.on('error', (err) => { logError(url, err.message || String(err)); eoseCount++; if (eoseCount >= total) finish(); });
     }
   });
 }
@@ -279,7 +346,10 @@ export function nostr_write(relays, event, opts = {}) {
       try { ws = new WebSocket(url); } catch { fail.push(url); doneCount++; if (doneCount >= total) finish(); continue; }
       sockets.push(ws);
 
-      ws.on('open', () => ws.send(JSON.stringify(['EVENT', event])));
+      ws.on('open', () => {
+        const payload = JSON.stringify(['EVENT', event]);
+        sendWithRelayLog(ws, url, 'EVENT', payload);
+      });
       ws.on('message', (raw) => {
         let msg; try { msg = JSON.parse(raw.toString()); } catch { return; }
         if (msg[0] === 'OK' && msg[1] === event.id) {
@@ -288,7 +358,7 @@ export function nostr_write(relays, event, opts = {}) {
           if (doneCount >= total) finish();
         }
       });
-      ws.on('error', () => { fail.push(url); doneCount++; if (doneCount >= total) finish(); });
+      ws.on('error', (err) => { logError(url, err.message || String(err)); fail.push(url); doneCount++; if (doneCount >= total) finish(); });
     }
   });
 }

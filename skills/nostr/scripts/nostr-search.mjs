@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // NIP-50 search — queries search-capable relays
-import { nostr_read, toHex, encodeNpub, encodeNevent, getProfileInfo, formatDisplayLabel } from './lib.mjs';
+import { nostr_read, toHex, encodeNpub, encodeNevent, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
 import WebSocket from 'ws';
 
 const DEFAULT_RELAY = 'wss://search.nos.today';
@@ -81,7 +81,8 @@ if (hookMode) {
     ws.on('open', () => {
       const filter = { kinds: [1], search: query, since: hookSince };
       if (pubkey) filter.authors = [pubkey];
-      ws.send(JSON.stringify(['REQ', subId, filter]));
+      const payload = JSON.stringify(['REQ', subId, filter]);
+      sendWithRelayLog(ws, relay, 'REQ', payload);
       lastEventAt = Date.now();
       startIdleWatch();
       console.error(`  Connected: ${relay}`);
@@ -126,7 +127,8 @@ if (hookMode) {
       if (idleTimer) clearInterval(idleTimer);
       scheduleReconnect();
     });
-    ws.on('error', () => {
+    ws.on('error', (err) => {
+      relayLogError(relay, err?.message || String(err));
       if (idleTimer) clearInterval(idleTimer);
       scheduleReconnect();
     });
