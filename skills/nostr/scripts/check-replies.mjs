@@ -132,17 +132,22 @@ async function fetchThread(rootId, currentEventId) {
   }
 }
 
-// Filter: skip if sender is in ignore list (any depth), OR if event is in a deep thread (index >= 5)
+// Two independent filters (both checked regardless of each other):
+//   Depth filter:  if the event is in a thread and its index >= 5, skip — no pubkey exceptions
+//   Pubkey ignore: if the sender is a known bot, skip — independent of thread depth
 async function shouldIgnoreEvent(event) {
-  // Pubkey ignore: skip events from known bots regardless of thread depth
-  if (ignorePubkeys.size > 0 && ignorePubkeys.has(event.pubkey)) return true;
-  // Depth filter: skip events at thread index >= 5 regardless of sender pubkey
+  // Depth filter: enforced for all senders unconditionally
   const rootId = getRootId(event);
-  if (!rootId) return false;
-  const threadEvents = await fetchThread(rootId, event.id);
-  if (!threadEvents) return false;
-  const idx = threadEvents.findIndex(e => e.id === event.id);
-  return idx >= 5;
+  if (rootId) {
+    const threadEvents = await fetchThread(rootId, event.id);
+    if (threadEvents) {
+      const idx = threadEvents.findIndex(e => e.id === event.id);
+      if (idx >= 5) return true;
+    }
+  }
+  // Pubkey ignore: skip events from known bots (independent of thread depth)
+  if (ignorePubkeys.size > 0 && ignorePubkeys.has(event.pubkey)) return true;
+  return false;
 }
 
 // Filter: skip if account kind:0 created within 5 days (or no kind:0)
