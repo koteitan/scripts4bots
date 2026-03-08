@@ -1,2 +1,6 @@
 .env
 node_modules/
+
+# runtime caches
+pubkey.txt
+skills/nostr/scripts/pubkey.txt
