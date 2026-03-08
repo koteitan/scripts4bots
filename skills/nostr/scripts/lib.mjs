@@ -301,7 +301,7 @@ export function getPubkeyFilePath() {
   return process.env.NOSTR_PUBKEY_FILE || resolve(WORKSPACE_ROOT, 'pubkey.txt');
 }
 
-/** Load and parse pubkey.txt → Map<hex, {display_name, name}> */
+/** Load and parse pubkey.txt → Map<hex, {display_name, name, bot}> */
 export function loadPubkeyMap() {
   if (_pubkeyCache !== null) return _pubkeyCache;
   const map = new Map();
@@ -309,13 +309,14 @@ export function loadPubkeyMap() {
   if (fs.existsSync(filePath)) {
     for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
       const t = line.trim();
-      if (!t || t.startsWith('#') || t === 'pubkey,display_name,name') continue;
+      if (!t || t.startsWith('#') || t === 'pubkey,display_name,name' || t === 'pubkey,display_name,name,bot') continue;
       const parts = t.split(',');
       const rawPubkey = (parts[0] || '').trim();
       if (!rawPubkey) continue;
       let hex;
       try { hex = toHex(rawPubkey); } catch { continue; }
-      map.set(hex, { display_name: (parts[1] || '').trim(), name: (parts[2] || '').trim() });
+      const bot = (parts[3] || '').trim() === 'bot';
+      map.set(hex, { display_name: (parts[1] || '').trim(), name: (parts[2] || '').trim(), bot });
     }
   }
   _pubkeyCache = map;
@@ -325,20 +326,21 @@ export function loadPubkeyMap() {
 /** Persist pubkey map to disk */
 export function savePubkeyMap(map) {
   _pubkeyCache = map;
-  const lines = ['pubkey,display_name,name'];
+  const lines = ['pubkey,display_name,name,bot'];
   for (const [hex, info] of map) {
-    lines.push(`${hex},${info.display_name || ''},${info.name || ''}`);
+    lines.push(`${hex},${info.display_name || ''},${info.name || ''},${info.bot ? 'bot' : ''}`);
   }
   try { fs.writeFileSync(getPubkeyFilePath(), lines.join('\n') + '\n'); } catch {}
 }
 
-/** Format display_name(name) label with fallbacks */
+/** Format display_name(name) label with fallbacks; appends [bot] if info.bot is true */
 export function formatDisplayLabel(info) {
   if (!info) return '';
   const dn = info.display_name || '';
   const n = info.name || '';
-  if (dn && n) return `${dn}(${n})`;
-  return dn || n;
+  const botSuffix = info.bot ? ' [bot]' : '';
+  if (dn && n) return `${dn}(${n})${botSuffix}`;
+  return (dn || n) + botSuffix;
 }
 
 /** Resolve and cache kind:0 profile for a pubkey. Never throws. */
@@ -347,13 +349,14 @@ export async function getProfileInfo(pubkeyHex, relays) {
   try { hex = toHex(pubkeyHex); } catch { return null; }
   const map = loadPubkeyMap();
   if (map.has(hex)) return map.get(hex);
-  const info = { display_name: '', name: '' };
+  const info = { display_name: '', name: '', bot: false };
   try {
     const events = await nostr_read(relays, [{ kinds: [0], authors: [hex], limit: 1 }], { timeoutMs: 5000 });
     if (events.length > 0) {
       const c = JSON.parse(events[0].content);
       info.display_name = ((c.display_name || c.displayName || '') + '').slice(0, 64);
       info.name = ((c.name || '') + '').slice(0, 64);
+      if (c.bot === true) info.bot = true;
     }
   } catch {}
   map.set(hex, info);

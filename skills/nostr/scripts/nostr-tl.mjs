@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // nostr-tl — タイムライン取得
 // Usage: nostr-tl [-n <number>] [--pubkey <hex>] [--me]
-import { getRelays, getPriv, privToPub, nostr_read, toHex } from './lib.mjs';
+import { getRelays, getPriv, privToPub, nostr_read, toHex, getProfileInfo, formatDisplayLabel, encodeNpub } from './lib.mjs';
 
 let limit = 20, pubkey = null, since = null, until = null, json = false;
 const args = process.argv.slice(2);
@@ -15,21 +15,28 @@ for (let i = 0; i < args.length; i++) {
   else if (args[i] === '--json') json = true;
 }
 
+const relays = getRelays();
 const filter = { kinds: [1], limit };
 if (pubkey) filter.authors = [pubkey];
 if (since) filter.since = since;
 if (until) filter.until = until;
 
-const events = await nostr_read(getRelays(), [filter]);
+const events = await nostr_read(relays, [filter]);
 
 const out = events.slice(0, limit);
 if (json) {
   console.log(JSON.stringify(out, null, 2));
 } else {
-  for (const ev of out) {
+  const profiles = await Promise.all(
+    out.map(ev => getProfileInfo(ev.pubkey, relays).catch(() => null))
+  );
+  for (let i = 0; i < out.length; i++) {
+    const ev = out[i];
     const date = new Date(ev.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
-    const author = ev.pubkey.slice(0, 12) + '…';
-    console.log(`[${date}] ${ev.id} ${author}`);
+    const npub = encodeNpub(ev.pubkey).slice(0, 16) + '…';
+    const label = formatDisplayLabel(profiles[i]);
+    const authorStr = label ? `${npub} ${label}` : npub;
+    console.log(`[${date}] ${ev.id} ${authorStr}`);
     console.log(ev.content);
     console.log('---');
   }
