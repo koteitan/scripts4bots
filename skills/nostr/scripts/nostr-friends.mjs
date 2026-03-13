@@ -231,13 +231,12 @@ export function buildFriendContext(authorNpub, opts = {}) {
 
   const parts = [];
 
-  // display name + kind0 raw
+  // display name only (kind0 raw is stored but not shown on Discord)
   const k0path = resolve(dir, 'kind0.txt');
   if (fs.existsSync(k0path)) {
     const raw = fs.readFileSync(k0path, 'utf8').trim();
     const shown = resolveDisplayNameFromKind0(raw, authorNpub);
     parts.push(`👤 friend: ${shown}`);
-    parts.push(`📄 kind0.txt\n${(raw || 'not found').slice(0, 1000)}`);
   }
 
   // thread root files — up to 10 newest by mtime
