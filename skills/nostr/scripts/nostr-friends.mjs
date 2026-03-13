@@ -185,10 +185,20 @@ export function buildFriendContext(authorNpub, maxChars = 1100) {
 
   const parts = [];
 
-  // kind0.txt — raw
+  // display name (human-readable) + kind0 raw
   const k0path = resolve(dir, 'kind0.txt');
   if (fs.existsSync(k0path)) {
     const raw = fs.readFileSync(k0path, 'utf8').trim();
+    let preferred = '';
+    try {
+      const p = JSON.parse(raw || '{}');
+      preferred = (p.display_name || p.displayName || p.name || '').trim();
+    } catch {
+      preferred = '';
+    }
+    const fallback = `${authorNpub.slice(0, 10)}…${authorNpub.slice(-4)}`;
+    const shown = preferred || fallback;
+    parts.push(`👤 friend: ${shown} (${fallback})`);
     parts.push(`📄 kind0.txt\n${(raw || 'not found').slice(0, 400)}`);
   }
 
