@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { nostr_read, getPriv, privToPub, encodeNpub, toHex, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
+import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 import fs from 'fs';
 
@@ -166,36 +167,44 @@ async function isAccountTooNew(pubkeyHex) {
 // Build and send Discord notification for a reply event
 async function notifyDiscordReply(event, webhookUrl) {
   const date = new Date(event.created_at * 1000).toISOString();
-  const content = event.content.slice(0, 1000);
   const senderInfo = await getProfileInfo(event.pubkey, RELAYS);
   const senderLabel = formatDisplayLabel(senderInfo);
   const senderNpub = encodeNpub(event.pubkey).slice(0, 16) + '…';
   const senderStr = senderLabel ? `${senderLabel} (${senderNpub})` : senderNpub;
-  let text = `🔔 **Nostr リプライ**\n\n[${date}] \`${event.id}\`\nFrom: ${senderStr}\n${content}`;
 
-  if (!noThread) {
-    const rootId = getRootId(event);
-    if (rootId) {
-      const threadEvents = await fetchThread(rootId, event.id);
-      if (threadEvents && threadEvents.length > 0) {
-        const threadProfiles = new Map();
-        await Promise.all(threadEvents.map(async te => {
-          threadProfiles.set(te.pubkey, await getProfileInfo(te.pubkey, RELAYS));
-        }));
-        text += '\n\n🧵 スレッド:';
-        for (const te of threadEvents) {
-          const teDate = new Date(te.created_at * 1000).toISOString().replace('T', ' ').slice(0, 16);
-          const teInfo = threadProfiles.get(te.pubkey);
-          const teLabel = formatDisplayLabel(teInfo);
-          const teNpub = encodeNpub(te.pubkey).slice(0, 16) + '…';
-          const teAuthor = teLabel ? `${teLabel}(${teNpub})` : teNpub;
-          const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
-          const isCurrentEvent = te.id === event.id;
-          const prefix = isCurrentEvent ? '  └→' : '    ';
-          const suffix = isCurrentEvent ? ' ← 今回のリプライ' : '';
-          text += `\n${prefix} [${teDate}] ${teAuthor}: ${teContent}${suffix}`;
-        }
-      }
+  // Always fetch thread: needed for friend kind1 storage and optionally for display
+  const rootId = getRootId(event);
+  let threadEvents = null;
+  if (rootId) threadEvents = await fetchThread(rootId, event.id);
+
+  // Friend storage: ensure dir + kind:0, append thread chain to today's kind1
+  const authorNpub = await ensureFriend(event.pubkey, RELAYS);
+  const ancestorChain = await fetchAncestorChainFromEvent(event, RELAYS);
+  appendThreadToKind1(authorNpub, ancestorChain);
+  const friendCtx = buildFriendContext(authorNpub);
+
+  const content = event.content.slice(0, 400);
+  let text = `🔔 **Nostr リプライ**\n\n[${date}] \`${event.id}\`\nFrom: ${senderStr}\n`;
+  if (friendCtx) text += `\n${friendCtx}\n`;
+  text += `\n${content}`;
+
+  if (!noThread && threadEvents && threadEvents.length > 0) {
+    const threadProfiles = new Map();
+    await Promise.all(threadEvents.map(async te => {
+      threadProfiles.set(te.pubkey, await getProfileInfo(te.pubkey, RELAYS));
+    }));
+    text += '\n\n🧵 スレッド:';
+    for (const te of threadEvents) {
+      const teDate = new Date(te.created_at * 1000).toISOString().replace('T', ' ').slice(0, 16);
+      const teInfo = threadProfiles.get(te.pubkey);
+      const teLabel = formatDisplayLabel(teInfo);
+      const teNpub = encodeNpub(te.pubkey).slice(0, 16) + '…';
+      const teAuthor = teLabel ? `${teLabel}(${teNpub})` : teNpub;
+      const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
+      const isCurrentEvent = te.id === event.id;
+      const prefix = isCurrentEvent ? '  └→' : '    ';
+      const suffix = isCurrentEvent ? ' ← 今回のリプライ' : '';
+      text += `\n${prefix} [${teDate}] ${teAuthor}: ${teContent}${suffix}`;
     }
   }
 

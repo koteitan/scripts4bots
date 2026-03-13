@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // NIP-50 search — queries search-capable relays
 import { nostr_read, toHex, encodeNpub, encodeNevent, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
+import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 
 const DEFAULT_RELAY = 'wss://search.nos.today';
@@ -101,12 +102,21 @@ if (hookMode) {
           seenIds.add(event.id);
           const t = new Date(event.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
           const npub = encodeNpub(event.pubkey);
-          const content = event.content.slice(0, 1000);
           const profileRelays = process.env.NOSTR_RELAYS?.split(',').map(s => s.trim()).filter(Boolean) || [relay];
           const authorInfo = await getProfileInfo(event.pubkey, profileRelays);
           const authorLabel = formatDisplayLabel(authorInfo);
           const authorStr = authorLabel ? `${authorLabel} (${npub.slice(0, 16)}…)` : npub.slice(0, 16) + '…';
-          const text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}]\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n${content}`;
+
+          // Friend storage: ensure dir + kind:0, append thread chain to today's kind1
+          const authorNpub = await ensureFriend(event.pubkey, profileRelays);
+          const ancestorChain = await fetchAncestorChainFromEvent(event, profileRelays);
+          appendThreadToKind1(authorNpub, ancestorChain);
+          const friendCtx = buildFriendContext(authorNpub);
+
+          const content = event.content.slice(0, 400);
+          let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}]\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n`;
+          if (friendCtx) text += `\n${friendCtx}\n`;
+          text += `\n${content}`;
           try {
             await fetch(webhookUrl, {
               method: 'POST',
