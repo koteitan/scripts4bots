@@ -267,11 +267,11 @@ export function buildFriendContext(authorNpub, opts = {}) {
       if (!fileContent) continue;
       const snippet = threadFileToDiscordSnippet(fileContent, 1000);
       if (!snippet) continue;
-      chunks.push(`📄 thread ${idx}\n${snippet}`);
+      chunks.push(`--- thread ${idx} ---\n${snippet}`);
       idx++;
     }
     if (chunks.length > 0) {
-      parts.push(`📝 recent threads (newest 10)\n${chunks.join('\n')}`);
+      parts.push(`📚 recent threads (excluding current)\n${chunks.join('\n\n')}`);
     }
   }
 

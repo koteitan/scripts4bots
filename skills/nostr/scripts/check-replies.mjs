@@ -206,10 +206,8 @@ async function notifyDiscordReply(event, webhookUrl) {
   const friendCtx = buildFriendContext(authorNpub, { excludeRootId: rootEventId });
 
   const content = event.content;
-  let text = `🔔 **Nostr リプライ**\n\nEvent ID: \`${event.id}\`\nFrom: ${senderStr}\n`;
-  if (friendCtx) text += `\n${friendCtx}\n`;
-  text += `\n${content}`;
-  text += `\n\nrev:${NOSTR_FRIENDS_REV}`;
+  let text = `🔔 **Nostr リプライ**\n\nEvent ID: \`${event.id}\`\nFrom: ${senderStr}`;
+  if (friendCtx) text += `\n\n${friendCtx}`;
 
   if (!noThread && threadEvents && threadEvents.length > 0) {
     const others = threadEvents.filter(te => te.id !== event.id);
@@ -218,16 +216,19 @@ async function notifyDiscordReply(event, webhookUrl) {
       await Promise.all(others.map(async te => {
         threadProfiles.set(te.pubkey, await getProfileInfo(te.pubkey, RELAYS));
       }));
-      text += '\n\n🧵 スレッド:';
+      text += '\n\n🧵 current thread';
       for (const te of others) {
         const teInfo = threadProfiles.get(te.pubkey);
         const teNpub = (() => { try { return encodeNpub(te.pubkey); } catch { return ''; } })();
         const teLabel = formatDisplayLabel(teInfo) || (teNpub ? `${teNpub.slice(0, 10)}…${teNpub.slice(-4)}` : 'unknown');
         const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
-        text += `\n    ${teLabel}: ${teContent}`;
+        text += `\n- ${teLabel}: ${teContent}`;
       }
     }
   }
+
+  text += `\n\n🎯 trigger post\n${content}`;
+  text += `\n\nrev:${NOSTR_FRIENDS_REV}`;
 
   try {
     await sendDiscordInChunks(webhookUrl, text, 'すしめいじ 🪄');

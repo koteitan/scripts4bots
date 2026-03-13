@@ -136,9 +136,18 @@ if (hookMode) {
           const friendCtx = buildFriendContext(authorNpub, { excludeRootId: rootEventId });
 
           const content = event.content;
-          let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n`;
-          if (friendCtx) text += `\n${friendCtx}\n`;
-          text += `\n${content}`;
+          let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}`;
+          if (friendCtx) text += `\n\n${friendCtx}`;
+
+          const currentThreadLines = (ancestorChain || [])
+            .filter(ev => ev?.id && ev.id !== event.id)
+            .map(ev => `- ${(ev.content || '').replace(/\n/g, ' ').slice(0, 100)}`)
+            .filter(Boolean);
+          if (currentThreadLines.length > 0) {
+            text += `\n\n🧵 current thread\n${currentThreadLines.join('\n')}`;
+          }
+
+          text += `\n\n🎯 trigger post\n${content}`;
           text += `\n\nrev:${NOSTR_FRIENDS_REV}`;
           try {
             await sendDiscordInChunks(webhookUrl, text, 'すしめいじ 🪄');
