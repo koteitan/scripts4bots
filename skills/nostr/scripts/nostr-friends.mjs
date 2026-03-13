@@ -1,7 +1,7 @@
 // nostr-friends.mjs — persistent friend storage helpers (import-only module)
 // Stores per-author kind:0 profile and kind:1 thread chains under
 //   nostr-friends/<author_npub>/kind0.txt
-//   nostr-friends/<author_npub>/kind1-YYYYMMDD.txt
+//   nostr-friends/<author_npub>/kind1_<rootEventId>.txt
 import fs from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -10,13 +10,6 @@ import { nostr_read, encodeNpub } from './lib.mjs';
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 export const FRIENDS_DIR = resolve(SCRIPTS_DIR, 'nostr-friends');
 
-/** YYYYMMDD string in UTC */
-function todayStr() {
-  const d = new Date();
-  return d.getUTCFullYear().toString()
-    + String(d.getUTCMonth() + 1).padStart(2, '0')
-    + String(d.getUTCDate()).padStart(2, '0');
-}
 
 /** Extract root event ID from NIP-10 e tags */
 export function getRootId(event) {
@@ -107,8 +100,6 @@ export async function ensureFriend(authorPubkeyHex, relays) {
       }
     }
 
-    const todayPath = resolve(dir, `kind1-${todayStr()}.txt`);
-    if (!fs.existsSync(todayPath)) fs.writeFileSync(todayPath, '', 'utf8');
   } catch {
     // 失敗しても処理継続
   }
@@ -128,11 +119,12 @@ export async function ensureFriend(authorPubkeyHex, relays) {
  * <content>
  * tags: <raw json>
  */
-export function appendThreadToKind1(authorNpub, threadEvents) {
+export function appendThreadToKind1(authorNpub, rootEventId, threadEvents) {
   try {
     const dir = resolve(FRIENDS_DIR, authorNpub);
     if (!fs.existsSync(dir)) return;
-    const filePath = resolve(dir, `kind1-${todayStr()}.txt`);
+    const safeRoot = /^[0-9a-f]{64}$/i.test(rootEventId || '') ? rootEventId.toLowerCase() : 'unknown';
+    const filePath = resolve(dir, `kind1_${safeRoot}.txt`);
 
     // Collect already-stored event IDs from block format
     const existingIds = new Set();
@@ -199,32 +191,36 @@ export function buildFriendContext(authorNpub) {
       displayName = '';
       name = '';
     }
-    const fallback = `${authorNpub.slice(0, 10)}…${authorNpub.slice(-4)}`;
-    const shown = displayName || name || fallback;
-    parts.push(shown === fallback ? `👤 friend: ${shown}` : `👤 friend: ${shown} (${fallback})`);
+    const shown = displayName || name || 'unknown';
+    parts.push(`👤 friend: ${shown}`);
     parts.push(`📄 kind0.txt\n${(raw || 'not found').slice(0, 1000)}`);
   }
 
-  // kind1 files — up to 10 newest (raw excerpt)
+  // kind1 root files — up to 10 newest by mtime (raw excerpt)
   let k1files;
   try {
     k1files = fs.readdirSync(dir)
-      .filter(f => /^kind1-\d{8}\.txt$/.test(f))
-      .sort().reverse().slice(0, 10);
+      .filter(f => /^kind1_[0-9a-f]{64}\.txt$/i.test(f))
+      .map(f => ({ f, m: fs.statSync(resolve(dir, f)).mtimeMs }))
+      .sort((a, b) => b.m - a.m)
+      .slice(0, 10)
+      .map(x => x.f);
   } catch {
     k1files = [];
   }
 
   if (k1files.length > 0) {
     const chunks = [];
+    let idx = 1;
     for (const f of k1files) {
       let fileContent = '';
       try { fileContent = fs.readFileSync(resolve(dir, f), 'utf8').trim(); } catch { fileContent = ''; }
       if (!fileContent) continue;
-      chunks.push(`📄 ${f}\n${fileContent.slice(0, 1000)}`);
+      chunks.push(`📄 thread ${idx}\n${fileContent.slice(0, 1000)}`);
+      idx++;
     }
     if (chunks.length > 0) {
-      parts.push(`📝 kind1 files (newest 10)\n${chunks.join('\n')}`);
+      parts.push(`📝 recent threads (newest 10)\n${chunks.join('\n')}`);
     }
   }
 

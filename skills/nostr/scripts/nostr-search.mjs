@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // NIP-50 search — queries search-capable relays
-import { nostr_read, toHex, encodeNpub, encodeNevent, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
+import { nostr_read, toHex, encodeNevent, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
 import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 
@@ -122,21 +122,20 @@ if (hookMode) {
           const event = msg[2];
           if (seenIds.has(event.id)) return;
           seenIds.add(event.id);
-          const t = new Date(event.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
-          const npub = encodeNpub(event.pubkey);
           const profileRelays = process.env.NOSTR_RELAYS?.split(',').map(s => s.trim()).filter(Boolean) || [relay];
           const authorInfo = await getProfileInfo(event.pubkey, profileRelays);
           const authorLabel = formatDisplayLabel(authorInfo);
-          const authorStr = authorLabel ? `${authorLabel} (${npub.slice(0, 16)}…)` : npub.slice(0, 16) + '…';
+          const authorStr = authorLabel || 'unknown';
 
           // Friend storage: ensure dir + kind:0, append thread chain to today's kind1
           const authorNpub = await ensureFriend(event.pubkey, profileRelays);
           const ancestorChain = await fetchAncestorChainFromEvent(event, profileRelays);
-          appendThreadToKind1(authorNpub, ancestorChain);
+          const rootEventId = ancestorChain?.[0]?.id || event.id;
+          appendThreadToKind1(authorNpub, rootEventId, ancestorChain);
           const friendCtx = buildFriendContext(authorNpub);
 
           const content = event.content;
-          let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}]\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n`;
+          let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n`;
           if (friendCtx) text += `\n${friendCtx}\n`;
           text += `\n${content}`;
           try {

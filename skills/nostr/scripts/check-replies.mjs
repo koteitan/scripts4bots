@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { nostr_read, getPriv, privToPub, encodeNpub, toHex, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
+import { nostr_read, getPriv, privToPub, toHex, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
 import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 import fs from 'fs';
@@ -188,11 +188,9 @@ async function sendDiscordInChunks(webhookUrl, text, username = 'すしめいじ
 
 // Build and send Discord notification for a reply event
 async function notifyDiscordReply(event, webhookUrl) {
-  const date = new Date(event.created_at * 1000).toISOString();
   const senderInfo = await getProfileInfo(event.pubkey, RELAYS);
   const senderLabel = formatDisplayLabel(senderInfo);
-  const senderNpub = encodeNpub(event.pubkey).slice(0, 16) + '…';
-  const senderStr = senderLabel ? `${senderLabel} (${senderNpub})` : senderNpub;
+  const senderStr = senderLabel || 'unknown';
 
   // Always fetch thread: needed for friend kind1 storage and optionally for display
   const rootId = getRootId(event);
@@ -202,11 +200,12 @@ async function notifyDiscordReply(event, webhookUrl) {
   // Friend storage: ensure dir + kind:0, append thread chain to today's kind1
   const authorNpub = await ensureFriend(event.pubkey, RELAYS);
   const ancestorChain = await fetchAncestorChainFromEvent(event, RELAYS);
-  appendThreadToKind1(authorNpub, ancestorChain);
+  const rootEventId = ancestorChain?.[0]?.id || event.id;
+  appendThreadToKind1(authorNpub, rootEventId, ancestorChain);
   const friendCtx = buildFriendContext(authorNpub);
 
   const content = event.content;
-  let text = `🔔 **Nostr リプライ**\n\n[${date}] \`${event.id}\`\nFrom: ${senderStr}\n`;
+  let text = `🔔 **Nostr リプライ**\n\nEvent ID: \`${event.id}\`\nFrom: ${senderStr}\n`;
   if (friendCtx) text += `\n${friendCtx}\n`;
   text += `\n${content}`;
 
@@ -217,16 +216,13 @@ async function notifyDiscordReply(event, webhookUrl) {
     }));
     text += '\n\n🧵 スレッド:';
     for (const te of threadEvents) {
-      const teDate = new Date(te.created_at * 1000).toISOString().replace('T', ' ').slice(0, 16);
       const teInfo = threadProfiles.get(te.pubkey);
-      const teLabel = formatDisplayLabel(teInfo);
-      const teNpub = encodeNpub(te.pubkey).slice(0, 16) + '…';
-      const teAuthor = teLabel ? `${teLabel}(${teNpub})` : teNpub;
+      const teLabel = formatDisplayLabel(teInfo) || 'unknown';
       const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
       const isCurrentEvent = te.id === event.id;
       const prefix = isCurrentEvent ? '  └→' : '    ';
       const suffix = isCurrentEvent ? ' ← 今回のリプライ' : '';
-      text += `\n${prefix} [${teDate}] ${teAuthor}: ${teContent}${suffix}`;
+      text += `\n${prefix} ${teLabel}: ${teContent}${suffix}`;
     }
   }
 
