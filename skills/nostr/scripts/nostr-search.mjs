@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // NIP-50 search — queries search-capable relays
-import { nostr_read, toHex, encodeNevent, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
+import { nostr_read, toHex, encodeNevent, encodeNpub, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
 import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 
@@ -125,7 +125,8 @@ if (hookMode) {
           const profileRelays = process.env.NOSTR_RELAYS?.split(',').map(s => s.trim()).filter(Boolean) || [relay];
           const authorInfo = await getProfileInfo(event.pubkey, profileRelays);
           const authorLabel = formatDisplayLabel(authorInfo);
-          const authorStr = authorLabel || 'unknown';
+          const authorNpubShortSrc = (() => { try { return encodeNpub(event.pubkey); } catch { return ''; } })();
+          const authorStr = authorLabel || (authorNpubShortSrc ? `${authorNpubShortSrc.slice(0, 10)}…${authorNpubShortSrc.slice(-4)}` : 'unknown');
 
           // Friend storage: ensure dir + kind:0, append thread chain to today's kind1
           const authorNpub = await ensureFriend(event.pubkey, profileRelays);

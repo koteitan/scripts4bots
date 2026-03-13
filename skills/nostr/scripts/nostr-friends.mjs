@@ -1,7 +1,7 @@
 // nostr-friends.mjs — persistent friend storage helpers (import-only module)
 // Stores per-author kind:0 profile and kind:1 thread chains under
 //   nostr-friends/<author_npub>/kind0.txt
-//   nostr-friends/<author_npub>/kind1_<rootEventId>.txt
+//   nostr-friends/<author_npub>/thread-<rootEventId>.txt
 import fs from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -124,7 +124,7 @@ export function appendThreadToKind1(authorNpub, rootEventId, threadEvents) {
     const dir = resolve(FRIENDS_DIR, authorNpub);
     if (!fs.existsSync(dir)) return;
     const safeRoot = /^[0-9a-f]{64}$/i.test(rootEventId || '') ? rootEventId.toLowerCase() : 'unknown';
-    const filePath = resolve(dir, `kind1_${safeRoot}.txt`);
+    const filePath = resolve(dir, `thread-${safeRoot}.txt`);
 
     // Collect already-stored event IDs from block format
     const existingIds = new Set();
@@ -171,52 +171,78 @@ export function appendThreadToKind1(authorNpub, rootEventId, threadEvents) {
  * kind0 は raw を提示、kind1 は新しい順で最大10ファイル分を提示。
  * 全体は maxChars に収める。
  */
+function shortNpub(npub) {
+  return npub ? `${npub.slice(0, 10)}…${npub.slice(-4)}` : 'unknown';
+}
+
+function resolveDisplayNameFromKind0(rawKind0, authorNpub) {
+  let displayName = '';
+  let name = '';
+  try {
+    const p = JSON.parse(rawKind0 || '{}');
+    displayName = String(p.display_name || p.displayName || '').trim().slice(0, 64);
+    name = String(p.name || '').trim().slice(0, 64);
+  } catch {
+    displayName = '';
+    name = '';
+  }
+  return displayName || name || shortNpub(authorNpub);
+}
+
+function threadFileToDiscordSnippet(raw, maxLen = 1000) {
+  // Remove metadata lines and keep only content body lines
+  const lines = String(raw || '').split('\n');
+  const out = [];
+  let inContent = false;
+  for (const line of lines) {
+    if (line === '---') { inContent = false; continue; }
+    if (line.startsWith('event_id:') || line.startsWith('created_at:') || line.startsWith('pubkey:') || line.startsWith('npub:') || line.startsWith('tags:')) {
+      continue;
+    }
+    if (line === 'content:') { inContent = true; continue; }
+    if (inContent) out.push(line);
+  }
+  return out.join('\n').trim().slice(0, maxLen);
+}
+
 export function buildFriendContext(authorNpub) {
   const dir = resolve(FRIENDS_DIR, authorNpub);
   if (!fs.existsSync(dir)) return '';
 
   const parts = [];
 
-  // display name (human-readable) + kind0 raw
+  // display name + kind0 raw
   const k0path = resolve(dir, 'kind0.txt');
   if (fs.existsSync(k0path)) {
     const raw = fs.readFileSync(k0path, 'utf8').trim();
-    let displayName = '';
-    let name = '';
-    try {
-      const p = JSON.parse(raw || '{}');
-      displayName = String(p.display_name || p.displayName || '').trim().slice(0, 64);
-      name = String(p.name || '').trim().slice(0, 64);
-    } catch {
-      displayName = '';
-      name = '';
-    }
-    const shown = displayName || name || 'unknown';
+    const shown = resolveDisplayNameFromKind0(raw, authorNpub);
     parts.push(`👤 friend: ${shown}`);
     parts.push(`📄 kind0.txt\n${(raw || 'not found').slice(0, 1000)}`);
   }
 
-  // kind1 root files — up to 10 newest by mtime (raw excerpt)
-  let k1files;
+  // thread root files — up to 10 newest by mtime
+  let threadFiles;
   try {
-    k1files = fs.readdirSync(dir)
-      .filter(f => /^kind1_[0-9a-f]{64}\.txt$/i.test(f))
+    threadFiles = fs.readdirSync(dir)
+      .filter(f => /^thread-[0-9a-f]{64}\.txt$/i.test(f))
       .map(f => ({ f, m: fs.statSync(resolve(dir, f)).mtimeMs }))
       .sort((a, b) => b.m - a.m)
       .slice(0, 10)
       .map(x => x.f);
   } catch {
-    k1files = [];
+    threadFiles = [];
   }
 
-  if (k1files.length > 0) {
+  if (threadFiles.length > 0) {
     const chunks = [];
     let idx = 1;
-    for (const f of k1files) {
+    for (const f of threadFiles) {
       let fileContent = '';
       try { fileContent = fs.readFileSync(resolve(dir, f), 'utf8').trim(); } catch { fileContent = ''; }
       if (!fileContent) continue;
-      chunks.push(`📄 thread ${idx}\n${fileContent.slice(0, 1000)}`);
+      const snippet = threadFileToDiscordSnippet(fileContent, 1000);
+      if (!snippet) continue;
+      chunks.push(`📄 thread ${idx}\n${snippet}`);
       idx++;
     }
     if (chunks.length > 0) {

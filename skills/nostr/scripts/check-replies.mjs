@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { nostr_read, getPriv, privToPub, toHex, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
+import { nostr_read, getPriv, privToPub, toHex, encodeNpub, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
 import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 import fs from 'fs';
@@ -190,7 +190,8 @@ async function sendDiscordInChunks(webhookUrl, text, username = 'すしめいじ
 async function notifyDiscordReply(event, webhookUrl) {
   const senderInfo = await getProfileInfo(event.pubkey, RELAYS);
   const senderLabel = formatDisplayLabel(senderInfo);
-  const senderStr = senderLabel || 'unknown';
+  const senderNpub = (() => { try { return encodeNpub(event.pubkey); } catch { return ''; } })();
+  const senderStr = senderLabel || (senderNpub ? `${senderNpub.slice(0, 10)}…${senderNpub.slice(-4)}` : 'unknown');
 
   // Always fetch thread: needed for friend kind1 storage and optionally for display
   const rootId = getRootId(event);
@@ -217,7 +218,8 @@ async function notifyDiscordReply(event, webhookUrl) {
     text += '\n\n🧵 スレッド:';
     for (const te of threadEvents) {
       const teInfo = threadProfiles.get(te.pubkey);
-      const teLabel = formatDisplayLabel(teInfo) || 'unknown';
+      const teNpub = (() => { try { return encodeNpub(te.pubkey); } catch { return ''; } })();
+      const teLabel = formatDisplayLabel(teInfo) || (teNpub ? `${teNpub.slice(0, 10)}…${teNpub.slice(-4)}` : 'unknown');
       const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
       const isCurrentEvent = te.id === event.id;
       const prefix = isCurrentEvent ? '  └→' : '    ';
