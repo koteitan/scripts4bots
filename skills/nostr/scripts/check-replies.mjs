@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { nostr_read, getPriv, privToPub, toHex, encodeNpub, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
+import { nostr_read, getPriv, privToPub, toHex, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
 import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent, NOSTR_FRIENDS_REV } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 import fs from 'fs';
@@ -193,11 +193,9 @@ async function notifyDiscordReply(event, webhookUrl) {
     getProfileInfo(myPubkey, RELAYS),
   ]);
   const senderLabel = formatDisplayLabel(senderInfo);
-  const senderNpub = (() => { try { return encodeNpub(event.pubkey); } catch { return ''; } })();
-  const senderStr = senderLabel || (senderNpub ? `${senderNpub.slice(0, 10)}…${senderNpub.slice(-4)}` : 'unknown');
+  const senderStr = senderLabel || 'unknown';
   const meLabel = formatDisplayLabel(meInfo);
-  const meNpub = (() => { try { return encodeNpub(myPubkey); } catch { return ''; } })();
-  const toStr = meLabel || (meNpub ? `${meNpub.slice(0, 10)}…${meNpub.slice(-4)}` : 'unknown');
+  const toStr = meLabel || 'unknown';
 
   // Always fetch thread: needed for friend kind1 storage and optionally for display
   const rootId = getRootId(event);
