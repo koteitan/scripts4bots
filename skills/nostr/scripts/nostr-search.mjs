@@ -133,7 +133,7 @@ if (hookMode) {
           const ancestorChain = await fetchAncestorChainFromEvent(event, profileRelays);
           const rootEventId = ancestorChain?.[0]?.id || event.id;
           appendThreadToKind1(authorNpub, rootEventId, ancestorChain);
-          const friendCtx = buildFriendContext(authorNpub);
+          const friendCtx = buildFriendContext(authorNpub, { excludeRootId: rootEventId });
 
           const content = event.content;
           let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n`;

@@ -205,7 +205,7 @@ function threadFileToDiscordSnippet(raw, maxLen = 1000) {
   return out.join('\n').trim().slice(0, maxLen);
 }
 
-export function buildFriendContext(authorNpub) {
+export function buildFriendContext(authorNpub, opts = {}) {
   const dir = resolve(FRIENDS_DIR, authorNpub);
   if (!fs.existsSync(dir)) return '';
 
@@ -221,10 +221,15 @@ export function buildFriendContext(authorNpub) {
   }
 
   // thread root files — up to 10 newest by mtime
+  const excludeRootId = /^[0-9a-f]{64}$/i.test(opts.excludeRootId || '')
+    ? String(opts.excludeRootId).toLowerCase()
+    : '';
+
   let threadFiles;
   try {
     threadFiles = fs.readdirSync(dir)
       .filter(f => /^thread-[0-9a-f]{64}\.txt$/i.test(f))
+      .filter(f => !excludeRootId || !f.toLowerCase().startsWith(`thread-${excludeRootId}`))
       .map(f => ({ f, m: fs.statSync(resolve(dir, f)).mtimeMs }))
       .sort((a, b) => b.m - a.m)
       .slice(0, 10)

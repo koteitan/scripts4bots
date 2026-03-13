@@ -203,7 +203,7 @@ async function notifyDiscordReply(event, webhookUrl) {
   const ancestorChain = await fetchAncestorChainFromEvent(event, RELAYS);
   const rootEventId = ancestorChain?.[0]?.id || event.id;
   appendThreadToKind1(authorNpub, rootEventId, ancestorChain);
-  const friendCtx = buildFriendContext(authorNpub);
+  const friendCtx = buildFriendContext(authorNpub, { excludeRootId: rootEventId });
 
   const content = event.content;
   let text = `🔔 **Nostr リプライ**\n\nEvent ID: \`${event.id}\`\nFrom: ${senderStr}\n`;
@@ -211,20 +211,20 @@ async function notifyDiscordReply(event, webhookUrl) {
   text += `\n${content}`;
 
   if (!noThread && threadEvents && threadEvents.length > 0) {
-    const threadProfiles = new Map();
-    await Promise.all(threadEvents.map(async te => {
-      threadProfiles.set(te.pubkey, await getProfileInfo(te.pubkey, RELAYS));
-    }));
-    text += '\n\n🧵 スレッド:';
-    for (const te of threadEvents) {
-      const teInfo = threadProfiles.get(te.pubkey);
-      const teNpub = (() => { try { return encodeNpub(te.pubkey); } catch { return ''; } })();
-      const teLabel = formatDisplayLabel(teInfo) || (teNpub ? `${teNpub.slice(0, 10)}…${teNpub.slice(-4)}` : 'unknown');
-      const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
-      const isCurrentEvent = te.id === event.id;
-      const prefix = isCurrentEvent ? '  └→' : '    ';
-      const suffix = isCurrentEvent ? ' ← 今回のリプライ' : '';
-      text += `\n${prefix} ${teLabel}: ${teContent}${suffix}`;
+    const others = threadEvents.filter(te => te.id !== event.id);
+    if (others.length > 0) {
+      const threadProfiles = new Map();
+      await Promise.all(others.map(async te => {
+        threadProfiles.set(te.pubkey, await getProfileInfo(te.pubkey, RELAYS));
+      }));
+      text += '\n\n🧵 スレッド:';
+      for (const te of others) {
+        const teInfo = threadProfiles.get(te.pubkey);
+        const teNpub = (() => { try { return encodeNpub(te.pubkey); } catch { return ''; } })();
+        const teLabel = formatDisplayLabel(teInfo) || (teNpub ? `${teNpub.slice(0, 10)}…${teNpub.slice(-4)}` : 'unknown');
+        const teContent = te.content.replace(/\n/g, ' ').slice(0, 100);
+        text += `\n    ${teLabel}: ${teContent}`;
+      }
     }
   }
 
