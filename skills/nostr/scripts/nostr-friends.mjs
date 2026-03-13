@@ -179,7 +179,7 @@ export function appendThreadToKind1(authorNpub, threadEvents) {
  * kind0 は raw を提示、kind1 は新しい順で最大10ファイル分を提示。
  * 全体は maxChars に収める。
  */
-export function buildFriendContext(authorNpub, maxChars = 1100) {
+export function buildFriendContext(authorNpub) {
   const dir = resolve(FRIENDS_DIR, authorNpub);
   if (!fs.existsSync(dir)) return '';
 
@@ -189,17 +189,20 @@ export function buildFriendContext(authorNpub, maxChars = 1100) {
   const k0path = resolve(dir, 'kind0.txt');
   if (fs.existsSync(k0path)) {
     const raw = fs.readFileSync(k0path, 'utf8').trim();
-    let preferred = '';
+    let displayName = '';
+    let name = '';
     try {
       const p = JSON.parse(raw || '{}');
-      preferred = (p.display_name || p.displayName || p.name || '').trim();
+      displayName = String(p.display_name || p.displayName || '').trim().slice(0, 64);
+      name = String(p.name || '').trim().slice(0, 64);
     } catch {
-      preferred = '';
+      displayName = '';
+      name = '';
     }
     const fallback = `${authorNpub.slice(0, 10)}…${authorNpub.slice(-4)}`;
-    const shown = preferred || fallback;
-    parts.push(`👤 friend: ${shown} (${fallback})`);
-    parts.push(`📄 kind0.txt\n${(raw || 'not found').slice(0, 400)}`);
+    const shown = displayName || name || fallback;
+    parts.push(shown === fallback ? `👤 friend: ${shown}` : `👤 friend: ${shown} (${fallback})`);
+    parts.push(`📄 kind0.txt\n${(raw || 'not found').slice(0, 1000)}`);
   }
 
   // kind1 files — up to 10 newest (raw excerpt)
@@ -218,14 +221,12 @@ export function buildFriendContext(authorNpub, maxChars = 1100) {
       let fileContent = '';
       try { fileContent = fs.readFileSync(resolve(dir, f), 'utf8').trim(); } catch { fileContent = ''; }
       if (!fileContent) continue;
-      chunks.push(`📄 ${f}\n${fileContent.slice(0, 220)}`);
+      chunks.push(`📄 ${f}\n${fileContent.slice(0, 1000)}`);
     }
     if (chunks.length > 0) {
       parts.push(`📝 kind1 files (newest 10)\n${chunks.join('\n')}`);
     }
   }
 
-  if (parts.length === 0) return '';
-  const combined = parts.join('\n\n');
-  return combined.length <= maxChars ? combined : combined.slice(0, maxChars - 1) + '…';
+  return parts.join('\n\n');
 }

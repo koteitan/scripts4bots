@@ -37,6 +37,28 @@ for (let i = 0; i < args.length; i++) {
 }
 if (!query) usage();
 
+async function sendDiscordInChunks(webhookUrl, text, username = 'すしめいじ 🪄') {
+  const MAX = 1900;
+  const chunks = [];
+  let rest = text;
+  while (rest.length > MAX) {
+    let cut = rest.lastIndexOf('\n', MAX);
+    if (cut <= 0) cut = MAX;
+    chunks.push(rest.slice(0, cut));
+    rest = rest.slice(cut).replace(/^\n+/, '');
+  }
+  if (rest.length) chunks.push(rest);
+
+  for (const chunk of chunks) {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: chunk, username })
+    });
+    if (!res.ok) console.error(`  Response: ${await res.text()}`);
+  }
+}
+
 if (hookMode) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_FOR_NOSTR_SEARCH;
   if (!webhookUrl) {
@@ -113,16 +135,12 @@ if (hookMode) {
           appendThreadToKind1(authorNpub, ancestorChain);
           const friendCtx = buildFriendContext(authorNpub);
 
-          const content = event.content.slice(0, 400);
+          const content = event.content;
           let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\n[${t}]\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n`;
           if (friendCtx) text += `\n${friendCtx}\n`;
           text += `\n${content}`;
           try {
-            await fetch(webhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: text.slice(0, 2000), username: 'すしめいじ 🪄' })
-            });
+            await sendDiscordInChunks(webhookUrl, text, 'すしめいじ 🪄');
             console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);
           } catch (e) {
             console.error(`  Discord notification failed: ${e.message}`);

@@ -164,6 +164,28 @@ async function isAccountTooNew(pubkeyHex) {
   }
 }
 
+async function sendDiscordInChunks(webhookUrl, text, username = 'すしめいじ 🪄') {
+  const MAX = 1900; // Discord hard limit is 2000
+  const chunks = [];
+  let rest = text;
+  while (rest.length > MAX) {
+    let cut = rest.lastIndexOf('\n', MAX);
+    if (cut <= 0) cut = MAX;
+    chunks.push(rest.slice(0, cut));
+    rest = rest.slice(cut).replace(/^\n+/, '');
+  }
+  if (rest.length) chunks.push(rest);
+
+  for (const chunk of chunks) {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: chunk, username })
+    });
+    if (!res.ok) console.error(`  Response: ${await res.text()}`);
+  }
+}
+
 // Build and send Discord notification for a reply event
 async function notifyDiscordReply(event, webhookUrl) {
   const date = new Date(event.created_at * 1000).toISOString();
@@ -183,7 +205,7 @@ async function notifyDiscordReply(event, webhookUrl) {
   appendThreadToKind1(authorNpub, ancestorChain);
   const friendCtx = buildFriendContext(authorNpub);
 
-  const content = event.content.slice(0, 400);
+  const content = event.content;
   let text = `🔔 **Nostr リプライ**\n\n[${date}] \`${event.id}\`\nFrom: ${senderStr}\n`;
   if (friendCtx) text += `\n${friendCtx}\n`;
   text += `\n${content}`;
@@ -209,13 +231,8 @@ async function notifyDiscordReply(event, webhookUrl) {
   }
 
   try {
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text.slice(0, 2000), username: 'すしめいじ 🪄' })
-    });
-    console.error(`  Notified Discord: ${event.id.slice(0, 12)}... (HTTP ${res.status})`);
-    if (!res.ok) console.error(`  Response: ${await res.text()}`);
+    await sendDiscordInChunks(webhookUrl, text, 'すしめいじ 🪄');
+    console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);
   } catch (e) {
     console.error(`  Discord notification failed: ${e.message}`);
   }
