@@ -41,7 +41,33 @@ for (let i = 0; i < args.length; i++) {
   else { textParts.push(args[i]); }
 }
 
-let text = textParts.join(' ');
+function isJsonLikeString(s) {
+  const t = s.trim();
+  return (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
+}
+
+function normalizeEscapes(raw) {
+  if (!raw) return raw;
+  if (isJsonLikeString(raw)) return raw;
+
+  const beforeLen = raw.length;
+  const nCount = (raw.match(/\\n/g) || []).length;
+  const rnCount = (raw.match(/\\r\\n/g) || []).length;
+  const tCount = (raw.match(/\\t/g) || []).length;
+
+  const normalized = raw
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t');
+
+  if (process.env.NOSTR_POST_DEBUG === '1') {
+    console.error(`[nostr-post] normalizeEscapes before=${beforeLen} after=${normalized.length} converted(\\\\r\\\\n=${rnCount}, \\\\n=${nCount}, \\\\t=${tCount})`);
+  }
+
+  return normalized;
+}
+
+let text = normalizeEscapes(textParts.join(' '));
 if (!text && !quoteId) { 
   console.error('Usage: nostr-post [--reply <id>] [--quote <id>] [--mention <pk>] "text"');
   console.error('Reply deduplication: --reply requires --check-hist <file> or --force');
