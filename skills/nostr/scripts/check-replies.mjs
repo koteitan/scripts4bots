@@ -188,10 +188,16 @@ async function sendDiscordInChunks(webhookUrl, text, username = 'すしめいじ
 
 // Build and send Discord notification for a reply event
 async function notifyDiscordReply(event, webhookUrl) {
-  const senderInfo = await getProfileInfo(event.pubkey, RELAYS);
+  const [senderInfo, meInfo] = await Promise.all([
+    getProfileInfo(event.pubkey, RELAYS),
+    getProfileInfo(myPubkey, RELAYS),
+  ]);
   const senderLabel = formatDisplayLabel(senderInfo);
   const senderNpub = (() => { try { return encodeNpub(event.pubkey); } catch { return ''; } })();
   const senderStr = senderLabel || (senderNpub ? `${senderNpub.slice(0, 10)}…${senderNpub.slice(-4)}` : 'unknown');
+  const meLabel = formatDisplayLabel(meInfo);
+  const meNpub = (() => { try { return encodeNpub(myPubkey); } catch { return ''; } })();
+  const toStr = meLabel || (meNpub ? `${meNpub.slice(0, 10)}…${meNpub.slice(-4)}` : 'unknown');
 
   // Always fetch thread: needed for friend kind1 storage and optionally for display
   const rootId = getRootId(event);
@@ -206,7 +212,7 @@ async function notifyDiscordReply(event, webhookUrl) {
   const friendCtx = buildFriendContext(authorNpub, { excludeRootId: rootEventId });
 
   const content = event.content;
-  let text = `🔔 **Nostr リプライ**\n\nEvent ID: \`${event.id}\`\nFrom: ${senderStr}`;
+  let text = `🔔 **Nostr リプライ**\n\nEvent ID: \`${event.id}\`\nTo: ${toStr}\nFrom: ${senderStr}`;
   if (friendCtx) text += `\n\n${friendCtx}`;
 
   if (!noThread && threadEvents && threadEvents.length > 0) {
