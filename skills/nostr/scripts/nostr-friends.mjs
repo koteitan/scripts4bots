@@ -186,7 +186,14 @@ function resolveDisplayNameFromKind0(rawKind0, authorNpub) {
     displayName = '';
     name = '';
   }
-  return displayName || name || shortNpub(authorNpub);
+
+  // 仕様: 👤 friend: <display_name> @<name>（欠損時フォールバック）
+  if (displayName && name) {
+    return displayName === name ? displayName : `${displayName} @${name}`;
+  }
+  if (displayName) return displayName;
+  if (name) return `@${name}`;
+  return shortNpub(authorNpub);
 }
 
 function threadFileToDiscordSnippet(raw, maxLen = 1000) {
