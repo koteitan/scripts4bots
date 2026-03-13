@@ -143,7 +143,7 @@ async function shouldIgnoreEvent(event) {
     const threadEvents = await fetchThread(rootId, event.id);
     if (threadEvents) {
       const idx = threadEvents.findIndex(e => e.id === event.id);
-      if (idx >= 5) return true;
+      if (idx >= 10) return true;
     }
   }
   // Pubkey ignore: skip events from known bots (independent of thread depth)
