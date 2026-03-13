@@ -186,16 +186,23 @@ async function sendDiscordInChunks(webhookUrl, text, username = 'すしめいじ
   }
 }
 
+function formatDisplayNameAndName(info) {
+  const display = String(info?.display_name || info?.displayName || '').trim();
+  const name = String(info?.name || '').trim();
+  if (display && name) return display === name ? display : `${display} @${name}`;
+  if (display) return display;
+  if (name) return `@${name}`;
+  return 'unknown';
+}
+
 // Build and send Discord notification for a reply event
 async function notifyDiscordReply(event, webhookUrl) {
   const [senderInfo, meInfo] = await Promise.all([
     getProfileInfo(event.pubkey, RELAYS),
     getProfileInfo(myPubkey, RELAYS),
   ]);
-  const senderLabel = formatDisplayLabel(senderInfo);
-  const senderStr = senderLabel || 'unknown';
-  const meLabel = formatDisplayLabel(meInfo);
-  const toStr = meLabel || 'unknown';
+  const senderStr = formatDisplayNameAndName(senderInfo);
+  const toStr = formatDisplayNameAndName(meInfo);
 
   // Always fetch thread: needed for friend kind1 storage and optionally for display
   const rootId = getRootId(event);
