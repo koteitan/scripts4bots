@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // NIP-50 search — queries search-capable relays
 import { nostr_read, toHex, encodeNevent, encodeNpub, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
-import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
+import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent, NOSTR_FRIENDS_REV } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 
 const DEFAULT_RELAY = 'wss://search.nos.today';
@@ -139,6 +139,7 @@ if (hookMode) {
           let text = `🔍 **Nostr 検索ヒット**: "${query}"\n\nEvent ID: \`${event.id}\`\nAuthor: ${authorStr}\n`;
           if (friendCtx) text += `\n${friendCtx}\n`;
           text += `\n${content}`;
+          text += `\n\nrev:${NOSTR_FRIENDS_REV}`;
           try {
             await sendDiscordInChunks(webhookUrl, text, 'すしめいじ 🪄');
             console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);

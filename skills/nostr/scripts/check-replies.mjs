@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { nostr_read, getPriv, privToPub, toHex, encodeNpub, getProfileInfo, formatDisplayLabel, relayLogError, sendWithRelayLog } from './lib.mjs';
-import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent } from './nostr-friends.mjs';
+import { ensureFriend, appendThreadToKind1, buildFriendContext, fetchAncestorChainFromEvent, NOSTR_FRIENDS_REV } from './nostr-friends.mjs';
 import WebSocket from 'ws';
 import fs from 'fs';
 
@@ -209,6 +209,7 @@ async function notifyDiscordReply(event, webhookUrl) {
   let text = `🔔 **Nostr リプライ**\n\nEvent ID: \`${event.id}\`\nFrom: ${senderStr}\n`;
   if (friendCtx) text += `\n${friendCtx}\n`;
   text += `\n${content}`;
+  text += `\n\nrev:${NOSTR_FRIENDS_REV}`;
 
   if (!noThread && threadEvents && threadEvents.length > 0) {
     const others = threadEvents.filter(te => te.id !== event.id);

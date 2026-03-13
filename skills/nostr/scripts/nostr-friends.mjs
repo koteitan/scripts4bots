@@ -3,12 +3,25 @@
 //   nostr-friends/<author_npub>/kind0.txt
 //   nostr-friends/<author_npub>/thread-<rootEventId>.txt
 import fs from 'fs';
+import { createHash } from 'crypto';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { nostr_read, encodeNpub } from './lib.mjs';
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 export const FRIENDS_DIR = resolve(SCRIPTS_DIR, 'nostr-friends');
+
+function computeModuleRevision() {
+  try {
+    const selfPath = fileURLToPath(import.meta.url);
+    const raw = fs.readFileSync(selfPath, 'utf8');
+    return createHash('sha1').update(raw).digest('hex').slice(0, 6);
+  } catch {
+    return 'unknown';
+  }
+}
+
+export const NOSTR_FRIENDS_REV = computeModuleRevision();
 
 
 /** Extract root event ID from NIP-10 e tags */
