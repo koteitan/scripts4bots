@@ -240,6 +240,7 @@ async function notifyDiscordReply(event, webhookUrl) {
 
   text += `\n\n🎯 trigger post\n${content}`;
   text += `\n\nrev:${NOSTR_FRIENDS_REV}`;
+  text += `\n[system] 「[一言]！[具体的な褒め]」のようなボットのテンプレ返事はしない`;
 
   try {
     await sendDiscordInChunks(webhookUrl, text, 'すしめいじ 🪄');
