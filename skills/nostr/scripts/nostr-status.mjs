@@ -11,10 +11,7 @@ import { nostr_read, nostr_write, getPriv, privToPub, signEvent } from './lib.mj
 const RELAYS = (process.env.NOSTR_RELAYS || '').split(',').map(s => s.trim()).filter(Boolean);
 if (!RELAYS.length) { console.error('NOSTR_RELAYS required'); process.exit(1); }
 
-const nsec = process.env.NOSTR_NSEC;
-if (!nsec) { console.error('NOSTR_NSEC required'); process.exit(1); }
-
-const privkey = getPriv(nsec);
+const privkey = getPriv();
 const pubkey = privToPub(privkey);
 
 // --- arg parse ---
