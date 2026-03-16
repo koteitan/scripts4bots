@@ -20,14 +20,16 @@ const pubkey = privToPub(privkey);
 // --- arg parse ---
 const args = process.argv.slice(2);
 let hp = null, mp = null, text = null, clear = false;
+let getMode = false;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--hp' && args[i + 1]) { hp = args[++i]; continue; }
   if (args[i] === '--mp' && args[i + 1]) { mp = args[++i]; continue; }
   if (args[i] === '--text' && args[i + 1]) { text = args[++i]; continue; }
   if (args[i] === '--clear') { clear = true; continue; }
+  if (args[i] === '--get') { getMode = true; continue; }
 }
 
-const isWrite = hp || mp || text !== null || clear;
+const isWrite = !getMode && (hp || mp || text !== null || clear);
 
 if (!isWrite) {
   // 読み込みモード
