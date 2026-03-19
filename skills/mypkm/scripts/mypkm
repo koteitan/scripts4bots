@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""MyPKM — Personal Knowledge Management CLI backed by SQLite."""
+
+VERSION = "0.1.0"
+
+import sqlite3
+import sys
+import os
+import re
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mypkm.db")
+
+
+def get_db(must_exist=False):
+    if must_exist and not os.path.exists(DB_PATH):
+        print("mypkm: database not found. Run 'mypkm init' first.", file=sys.stderr)
+        sys.exit(1)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def cmd_init():
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT UNIQUE NOT NULL,
+            description TEXT DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS related (
+            source_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+            target_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+            PRIMARY KEY (source_id, target_id)
+        );
+    """)
+    conn.commit()
+    conn.close()
+    print("mypkm: initialized", DB_PATH)
+
+
+def cmd_ls():
+    conn = get_db(must_exist=True)
+    rows = conn.execute("SELECT title FROM items ORDER BY title").fetchall()
+    conn.close()
+    if not rows:
+        print("(empty)")
+        return
+    for r in rows:
+        print(r[0])
+
+
+def auto_wikilink(text, conn, exclude_title=None):
+    """Replace known titles in text with [[title]] wikilinks."""
+    titles = [r[0] for r in conn.execute(
+        "SELECT title FROM items ORDER BY length(title) DESC"
+    ).fetchall()]
+    for t in titles:
+        if t == exclude_title:
+            continue
+        pattern = re.compile(r'(?<!\[\[)' + re.escape(t) + r'(?!\]\])')
+        text = pattern.sub(f"[[{t}]]", text, count=0)
+    return text
+
+
+def ensure_item(conn, title):
+    """Get or create an item, return its id."""
+    row = conn.execute("SELECT id FROM items WHERE title = ?", (title,)).fetchone()
+    if row:
+        return row[0]
+    conn.execute("INSERT INTO items (title) VALUES (?)", (title,))
+    conn.commit()
+    row = conn.execute("SELECT id FROM items WHERE title = ?", (title,)).fetchone()
+    return row[0]
+
+
+def add_related(conn, source_id, target_id):
+    """Add bidirectional related link."""
+    if source_id == target_id:
+        return
+    conn.execute(
+        "INSERT OR IGNORE INTO related (source_id, target_id) VALUES (?, ?)",
+        (source_id, target_id)
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO related (source_id, target_id) VALUES (?, ?)",
+        (target_id, source_id)
+    )
+
+
+def cmd_put(args):
+    if not args:
+        print("usage: mypkm put <title> [-d <desc>] [-r <related>,...]", file=sys.stderr)
+        sys.exit(1)
+
+    title = args[0]
+    desc = None
+    related_str = None
+
+    i = 1
+    while i < len(args):
+        if args[i] in ("-d", "-b") and i + 1 < len(args):
+            desc = args[i + 1]
+            i += 2
+        elif args[i] == "-r" and i + 1 < len(args):
+            related_str = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    conn = get_db(must_exist=True)
+    item_id = ensure_item(conn, title)
+
+    if desc is not None:
+        desc = auto_wikilink(desc, conn, exclude_title=title)
+        conn.execute("UPDATE items SET description = ? WHERE id = ?", (desc, item_id))
+
+    if related_str:
+        for rel_title in related_str.split(","):
+            rel_title = rel_title.strip()
+            if not rel_title:
+                continue
+            rel_id = ensure_item(conn, rel_title)
+            add_related(conn, item_id, rel_id)
+
+    conn.commit()
+    conn.close()
+    print(f"put: {title}")
+
+
+def cmd_get(args):
+    if not args:
+        print("usage: mypkm get <title> [-1]", file=sys.stderr)
+        sys.exit(1)
+
+    title = args[0]
+    only_self = "-1" in args
+
+    conn = get_db(must_exist=True)
+    row = conn.execute(
+        "SELECT id, title, description FROM items WHERE title = ?", (title,)
+    ).fetchone()
+
+    if not row:
+        print(f"not found: {title}", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    item_id, item_title, item_desc = row
+
+    print(f"{item_title}:{item_desc or ''}")
+
+    if not only_self:
+        related = conn.execute("""
+            SELECT i.title, i.description FROM related r
+            JOIN items i ON i.id = r.target_id
+            WHERE r.source_id = ?
+            ORDER BY i.title
+            LIMIT 3
+        """, (item_id,)).fetchall()
+
+        for rel_title, rel_desc in related:
+            print(f"{rel_title}:{rel_desc or ''}")
+
+    conn.close()
+
+
+def cmd_rm(args):
+    if not args:
+        print("usage: mypkm rm <title>", file=sys.stderr)
+        sys.exit(1)
+
+    title = args[0]
+    conn = get_db(must_exist=True)
+    row = conn.execute("SELECT id FROM items WHERE title = ?", (title,)).fetchone()
+    if not row:
+        print(f"not found: {title}", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    conn.execute("DELETE FROM items WHERE id = ?", (row[0],))
+    conn.commit()
+    conn.close()
+    print(f"rm: {title}")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("usage: mypkm <init|ls|put|get|rm> [args...]", file=sys.stderr)
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+    args = sys.argv[2:]
+
+    if cmd == "init":
+        cmd_init()
+    elif cmd == "ls":
+        cmd_ls()
+    elif cmd == "put":
+        cmd_put(args)
+    elif cmd == "get":
+        cmd_get(args)
+    elif cmd == "rm":
+        cmd_rm(args)
+    else:
+        print(f"unknown command: {cmd}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
