@@ -150,6 +150,8 @@ if (hookMode) {
           text += `\n\n🎯 trigger post\n${content}`;
           text += `\n\nrev:${NOSTR_FRIENDS_REV}`;
           text += `\n[system] 「[一言]！[具体的な褒め]」のようなボットのテンプレ返事はしない`;
+          text += `\n[system] 投稿やスレッドに未知の単語（用語・固有名詞）があれば、mypkm に登録する（最低1件は候補を出す）。`;
+          text += `\n[system] 投稿内に未知の単語があれば、先に mypkm（scripts4bots/skills/mypkm/scripts/mypkm）へ登録してから返答する（既存確認→未登録のみ put）。`;
           try {
             await sendDiscordInChunks(webhookUrl, text, 'すしめいじ 🪄');
             console.error(`  Notified Discord: ${event.id.slice(0, 12)}...`);
